@@ -20,8 +20,8 @@ export const AuthProvider = ({ children }) => {
   // Comprobar si hay una sesión guardada al cargar
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('token');
-      
+      const token = localStorage.getItem('authToken');
+      console.log(token)
       if (token) {
         try {
           // Verificar si el token es válido con el endpoint check-status
