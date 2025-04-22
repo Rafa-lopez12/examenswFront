@@ -8,6 +8,9 @@ import WorkArea from './componentsfigma/WorkArea';
 import PagesPanel from './componentsfigma/PagesPanel';
 import { useVista } from '../../context/VistaContext';
 import { useFigura } from '../../context/FiguraContext';
+import CapturesPreview from './componentsfigma/CaptureCanvasPreview';
+import { generateCodeFromScreenshot, base64ToBlob } from '../../api/img';
+import CodeResultsModal from './componentsfigma/CodeResultsModal';
 
 const Canvas = () => {
   const theme = useTheme();
@@ -36,6 +39,14 @@ const Canvas = () => {
   const [selectedShapeId, setSelectedShapeId] = useState(null);
   const [pageShapes, setPageShapes] = useState([]);
   const [loadingShapes, setLoadingShapes] = useState(false);
+
+  const [captures, setCaptures] = useState([]);
+  const [captureModalOpen, setCaptureModalOpen] = useState(false);
+
+  const [codeResults, setCodeResults] = useState([]);
+  const [codeResultsModalOpen, setCodeResultsModalOpen] = useState(false);
+  const [generatingCode, setGeneratingCode] = useState(false);
+
   // Extraer el ID del proyecto de la URL
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -245,6 +256,135 @@ const Canvas = () => {
     return <Box sx={{ padding: 3, color: 'error.main' }}>{error}</Box>;
   }
 
+
+
+const handleCaptureCanvas = () => {
+  if (window.canvasAPI && typeof window.canvasAPI.captureCanvas === 'function') {
+    const result = window.canvasAPI.captureCanvas();
+    
+    if (result && result.success) {
+      // Agregar la nueva captura al estado
+      const newCapture = {
+        id: `capture-${Date.now()}`,
+        dataURL: result.dataURL,
+        pageInfo: result.pageInfo
+      };
+      
+      setCaptures(prevCaptures => [...prevCaptures, newCapture]);
+      showNotification(`Captura de "${result.pageInfo.name}" guardada`, 'success');
+      
+      // Opcionalmente mostrar el modal con las capturas
+      if (captures.length === 0) {
+        setCaptureModalOpen(true);
+      }
+    } else {
+      showNotification('No se pudo capturar el lienzo', 'error');
+    }
+  } else {
+    console.log('window.canvasAPI:', window.canvasAPI);
+    console.log('typeof window.canvasAPI.captureCanvas:', typeof window.canvasAPI?.captureCanvas);
+    showNotification('Función de captura no disponible', 'error');
+  }
+};
+
+const prepareCapturesToSend = () => {
+  // Aquí construimos la estructura de datos que enviaremos al backend
+  const captureData = captures.map(capture => ({
+    vistaId: capture.pageInfo.id,
+    nombre: capture.pageInfo.name,
+    timestamp: capture.pageInfo.timestamp,
+    imageData: capture.dataURL.split(',')[1], // Eliminamos el prefijo "data:image/png;base64,"
+  }));
+  
+  console.log('Datos preparados para enviar al backend:', captureData);
+  return captureData;
+};
+
+const handleSendCaptures = async () => {
+  try {
+    setGeneratingCode(true);
+    setCodeResultsModalOpen(true);
+    showNotification('Enviando capturas para generar código...', 'info');
+    
+    const results = [];
+    
+    // Procesar cada captura
+    for (const capture of captures) {
+      try {
+        // Convertir base64 a Blob
+        const base64Data = capture.dataURL.split(',')[1];
+        const imageBlob = await base64ToBlob(base64Data);
+        
+        // Enviar al backend
+        const response = await generateCodeFromScreenshot(
+          imageBlob,
+          capture.pageInfo.name,
+          `Página del proyecto ${project?.nombre || 'sin nombre'}`
+        );
+        
+        results.push({
+          pageInfo: capture.pageInfo,
+          result: response.data
+        });
+        
+        showNotification(`Código generado para "${capture.pageInfo.name}"`, 'success');
+      } catch (error) {
+        console.error(`Error al procesar captura ${capture.pageInfo.name}:`, error);
+        results.push({
+          pageInfo: capture.pageInfo,
+          result: {
+            success: false,
+            message: error.response?.data?.message || 'Error al generar código',
+            error: error.message
+          }
+        });
+        showNotification(`Error al generar código para "${capture.pageInfo.name}"`, 'error');
+      }
+    }
+    
+    setCodeResults(results);
+    
+    const successCount = results.filter(r => r.result?.success).length;
+    showNotification(
+      `Se generó código para ${successCount} de ${captures.length} capturas`, 
+      successCount === captures.length ? 'success' : 'warning'
+    );
+    
+  } catch (error) {
+    console.error('Error general al enviar capturas:', error);
+    
+    let errorMessage = 'Error al generar código';
+    if (error.response) {
+      errorMessage = `Error ${error.response.status}: ${error.response.data.message || 'Error desconocido'}`;
+    } else if (error.request) {
+      errorMessage = 'No se pudo conectar con el servidor';
+    }
+    
+    showNotification(errorMessage, 'error');
+  } finally {
+    setGeneratingCode(false);
+  }
+};
+
+const handleRemoveCapture = (captureId) => {
+  setCaptures(prevCaptures => prevCaptures.filter(capture => capture.id !== captureId));
+};
+
+// Función para limpiar todas las capturas
+const handleClearCaptures = () => {
+  setCaptures([]);
+  setCaptureModalOpen(false);
+};
+
+const handleShowCapturesModal = () => {
+  setCaptureModalOpen(true);
+};
+
+const handleCloseCodeResultsModal = () => {
+  setCodeResultsModalOpen(false);
+};
+
+
   return (
     <Box sx={{ 
       display: 'flex', 
@@ -257,11 +397,14 @@ const Canvas = () => {
       
       {/* Barra superior */}
       <CanvasTopBar 
-        projectName={project?.nombre || 'Proyecto sin nombre'}
-        onToggleLeftSidebar={toggleLeftSidebar}
-        onToggleRightSidebar={toggleRightSidebar}
-        onTogglePages={togglePagesPanel}
-      />
+      projectName={project?.nombre || 'Proyecto sin nombre'}
+      onToggleLeftSidebar={toggleLeftSidebar}
+      onToggleRightSidebar={toggleRightSidebar}
+      onTogglePages={togglePagesPanel}
+      onCaptureCanvas={handleCaptureCanvas}
+      onShowCapturesModal={handleShowCapturesModal}
+      capturesCount={captures.length}
+    />
       
       {/* Área principal con sidebars */}
       <Box sx={{ 
@@ -327,6 +470,16 @@ const Canvas = () => {
           <Typography variant="body2">Cargando figuras...</Typography>
         </Box>
       )}
+
+    <CapturesPreview
+      open={captureModalOpen}
+      onClose={() => setCaptureModalOpen(false)}
+      captures={captures}
+      onRemoveCapture={handleRemoveCapture}
+      onClearAll={handleClearCaptures}
+      onSendCaptures={handleSendCaptures}
+      onCaptureCurrentPage={handleCaptureCanvas}
+    />
       
       {/* Notificaciones */}
       <Snackbar
@@ -339,7 +492,14 @@ const Canvas = () => {
           {notification.message}
         </Alert>
       </Snackbar>
+      <CodeResultsModal
+        open={codeResultsModalOpen}
+        onClose={handleCloseCodeResultsModal}
+        codeResults={codeResults}
+        loading={generatingCode}
+      />
     </Box>
+    
   );
 };
 

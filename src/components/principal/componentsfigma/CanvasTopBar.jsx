@@ -10,7 +10,8 @@ import {
   Menu,
   MenuItem,
   Divider,
-  Tooltip
+  Tooltip,
+  Badge
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -19,9 +20,10 @@ import {
   People as PeopleIcon,
   ViewQuilt as PagesIcon,
   ArrowBack as ArrowBackIcon,
-  Save as SaveIcon,
   MoreVert as MoreVertIcon,
-  Share as ShareIcon
+  Share as ShareIcon,
+  PhotoCamera as CameraIcon,
+  PhotoLibrary as GalleryIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -30,7 +32,10 @@ const CanvasTopBar = ({
   onToggleLeftSidebar, 
   onToggleRightSidebar,
   onToggleCollaborators,
-  onTogglePages
+  onTogglePages,
+  onCaptureCanvas,
+  onShowCapturesModal,
+  capturesCount = 0
 }) => {
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = React.useState(null);
@@ -119,9 +124,21 @@ const CanvasTopBar = ({
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Botones principales */}
-        <Tooltip title="Guardar">
-          <IconButton color="inherit">
-            <SaveIcon />
+        <Tooltip title="Capturar página actual">
+          <IconButton color="inherit" onClick={onCaptureCanvas}>
+            <CameraIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Ver capturas guardadas">
+          <IconButton 
+            color="inherit" 
+            onClick={onShowCapturesModal}
+            sx={{ mr: 1 }}
+          >
+            <Badge badgeContent={capturesCount} color="primary" showZero={false}>
+              <GalleryIcon />
+            </Badge>
           </IconButton>
         </Tooltip>
 

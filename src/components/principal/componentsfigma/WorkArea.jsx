@@ -944,169 +944,87 @@ useEffect(() => {
     
     setShapes(updatedShapes);
     setEditingText(null);
-  };
+  }
 
-  // Función para manejar el doble clic en textos
-  // const handleTextDblClick = (e) => {
-  //   const id = e.target.id();
-  //   const textNode = e.target;
-    
-  //   // Encontrar la forma de texto
-  //   const shape = shapes.find(s => s.id === id);
-  //   if (!shape || shape.type !== 'text') return;
-    
-  //   // Activar modo de edición
-  //   setEditingText(id);
-    
-  //   // Usar el texto actual, o un string vacío si es el texto por defecto
-  //   const currentText = shape.text === 'Doble clic para editar' ? '' : shape.text;
-  //   setTextValue(currentText);
-    
-  //   // Ocultar temporalmente el nodo de texto original
-  //   textNode.visible(false);
-  //   stageRef.current.batchDraw();
-    
-  //   // Crear un textarea HTML para editar
-  //   const textarea = document.createElement('textarea');
-  //   const stage = stageRef.current;
-  //   const container = stage.container();
-    
-  //   // Posicionar el textarea sobre el texto en el canvas
-  //   container.appendChild(textarea);
-    
-  //   // Calcular la posición y estilo del textarea
-  //   const transform = stage.getAbsoluteTransform();
-  //   const pos = transform.point({ x: textNode.x(), y: textNode.y() });
-    
-  //   textarea.value = currentText;
-  //   textarea.style.position = 'absolute';
-  //   textarea.style.top = `${pos.y}px`;
-  //   textarea.style.left = `${pos.x}px`;
-  //   textarea.style.width = `${textNode.width() * stage.scaleX()}px`;
-  //   textarea.style.height = `${textNode.height() * stage.scaleY()}px`;
-  //   textarea.style.fontSize = `${shape.fontSize * stage.scaleY()}px`;
-  //   textarea.style.border = '1px solid #999';
-  //   textarea.style.padding = '2px';
-  //   textarea.style.margin = '0px';
-  //   textarea.style.overflow = 'hidden';
-  //   textarea.style.background = 'white';
-  //   textarea.style.outline = 'none';
-  //   textarea.style.resize = 'none';
-  //   textarea.style.fontFamily = 'Arial';
-  //   textarea.style.lineHeight = '1';
-  //   textarea.style.zIndex = '1000';
-    
-  //   textareaRef.current = textarea;
-    
-  //   // Enfocar el textarea y seleccionar todo el texto
-  //   textarea.focus();
-  //   textarea.select();
-    
-  //   // Manejar cambios en el textarea
-  //   textarea.addEventListener('input', () => {
-  //     setTextValue(textarea.value);
-  //   });
-    
-  //   // Manejar cuando se completa la edición
-  //   const handleOutsideClick = (e) => {
-  //     if (e.target !== textarea) {
-  //       completeTextEditing();
-  //       window.removeEventListener('click', handleOutsideClick);
-  //     }
-  //   };
-    
-  //   // Añadir un pequeño retraso para evitar que se active inmediatamente
-  //   setTimeout(() => {
-  //     window.addEventListener('click', handleOutsideClick);
-  //   }, 100);
-    
-  //   // Manejar tecla Enter y Esc
-  //   textarea.addEventListener('keydown', (e) => {
-  //     if (e.key === 'Enter' && !e.shiftKey) {
-  //       completeTextEditing();
-  //       e.preventDefault();
-  //     }
-  //     if (e.key === 'Escape') {
-  //       cancelTextEditing();
-  //       e.preventDefault();
-  //     }
-  //   });
-  // };
+// Función mejorada para capturar el lienzo y almacenar la imagen
+const captureCanvas = () => {
+  if (!stageRef.current || !activePage) return { success: false };
   
-  // // Función mejorada para completar la edición de texto
-  // const completeTextEditing = () => {
-  //   if (!editingText) return;
-    
-  //   const newText = textValue || 'Doble clic para editar'; // Usar texto por defecto si está vacío
-  //   const id = editingText;
-    
-  //   // Actualizar el texto en el estado
-  //   const updatedShapes = shapes.map(shape => {
-  //     if (shape.id === id) {
-  //       const updatedShape = {
-  //         ...shape,
-  //         text: newText,
-  //       };
-        
-  //       // Solo actualizar en el backend si la forma no es temporal
-  //       if (!shape.id.startsWith('temp_')) {
-  //         // Crear objeto para enviar al backend
-  //         const shapeForBackend = {
-  //           id: shape.id,
-  //           ...updatedShape,
-  //           tipo: updatedShape.type,
-  //           paginaId: activePage?.id,
-  //           vistaId: activePage?.id,
-  //           text: newText, // Asegurarse de que el texto se incluye explícitamente
-  //         };
-          
-  //         // Enviar al socket y notificar al componente padre
-  //         updateFigure(shapeForBackend, activePage?.id);
-  //         if (onShapeUpdate) {
-  //           onShapeUpdate(shapeForBackend);
-  //         }
-  //       }
-        
-  //       return updatedShape;
-  //     }
-  //     return shape;
-  //   });
-    
-  //   setShapes(updatedShapes);
-    
-  //   // Hacer visible de nuevo el nodo de texto
-  //   const textNode = stageRef.current.findOne('#' + id);
-  //   if (textNode) {
-  //     textNode.visible(true);
-  //     stageRef.current.batchDraw();
-  //   }
-    
-  //   removeTextarea();
-  // };
+  // Ocultar temporalmente los controles de transformación
+  const transformer = transformerRef.current;
+  const transformerVisible = transformer ? transformer.isVisible() : false;
+  if (transformer) transformer.visible(false);
   
-  // // Función para cancelar la edición sin guardar cambios
-  // const cancelTextEditing = () => {
-  //   if (!editingText) return;
-    
-  //   // Hacer visible de nuevo el nodo de texto
-  //   const textNode = stageRef.current.findOne('#' + editingText);
-  //   if (textNode) {
-  //     textNode.visible(true);
-  //     stageRef.current.batchDraw();
-  //   }
-    
-  //   removeTextarea();
-  // };
+  // Ocultar resaltado de selección si hay algún elemento seleccionado
+  const selectedShape = selectedId ? stageRef.current.findOne('#' + selectedId) : null;
+  let originalStroke, originalStrokeWidth;
   
-  // // Función para remover el textarea
-  // const removeTextarea = () => {
-  //   if (textareaRef.current) {
-  //     textareaRef.current.parentNode.removeChild(textareaRef.current);
-  //     textareaRef.current = null;
-  //   }
-  //   setEditingText(null);
-  //   setTextValue('');
-  // };
+  if (selectedShape) {
+    originalStroke = selectedShape.stroke();
+    originalStrokeWidth = selectedShape.strokeWidth();
+    selectedShape.stroke('rgba(0,0,0,0.2)');
+    selectedShape.strokeWidth(1);
+  }
+  
+  // Forzar redibujado
+  stageRef.current.batchDraw();
+  
+  try {
+    // Generar imagen como URL de datos
+    const dataURL = stageRef.current.toDataURL({
+      pixelRatio: 2, // Mayor calidad
+      mimeType: 'image/png'
+    });
+    
+    // Obtener información de la página para asociarla con la captura
+    const pageInfo = {
+      id: activePage.id,
+      name: activePage.nombre || activePage.name || `Página ${activePage.id}`,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Devolver tanto el dataURL como la información de la página
+    return {
+      success: true,
+      dataURL,
+      pageInfo,
+      // Para compatibilidad con la función anterior
+      download: () => {
+        const link = document.createElement('a');
+        link.download = `canvas-${pageInfo.name}-${pageInfo.timestamp.slice(0, 10)}.png`;
+        link.href = dataURL;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
+  } catch (error) {
+    console.error('Error al capturar el canvas:', error);
+    return { success: false, error };
+  } finally {
+    // Restaurar controles y selección
+    if (transformer) transformer.visible(transformerVisible);
+    if (selectedShape) {
+      selectedShape.stroke(originalStroke);
+      selectedShape.strokeWidth(originalStrokeWidth);
+    }
+    // Forzar redibujado de nuevo
+    stageRef.current.batchDraw();
+  }
+};
+
+// Exponer funciones y datos necesarios
+if (typeof window !== 'undefined') {
+  window.canvasAPI = {
+    getSelectedShape,
+    updateShapeProps,
+    shapes,
+    captureCanvas
+  };
+}
+
+
+
 
 
   return (
