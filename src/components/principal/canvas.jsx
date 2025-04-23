@@ -300,6 +300,8 @@ const prepareCapturesToSend = () => {
   return captureData;
 };
 
+// Actualización de la función handleSendCaptures en Canvas.jsx
+
 const handleSendCaptures = async () => {
   try {
     setGeneratingCode(true);
@@ -311,16 +313,36 @@ const handleSendCaptures = async () => {
     // Procesar cada captura
     for (const capture of captures) {
       try {
-        // Convertir base64 a Blob
-        const base64Data = capture.dataURL.split(',')[1];
-        const imageBlob = await base64ToBlob(base64Data);
+        // Extraer la parte de datos de la URL de datos
+        let imageData;
         
-        // Enviar al backend
+        if (capture.dataURL.startsWith('data:image')) {
+          // Si ya es una URL de datos completa, extraer solo la parte base64
+          imageData = capture.dataURL;
+        } else {
+          console.error('Formato de captura inválido:', capture.dataURL.substring(0, 30) + '...');
+          throw new Error('Formato de captura inválido');
+        }
+        
+        // Convertir a Blob usando nuestra función mejorada
+        const imageBlob = await base64ToBlob(imageData);
+        
+        console.log('Enviando imagen:', {
+          tipo: 'Blob',
+          tamaño: imageBlob.size,
+          tipo_mime: imageBlob.type
+        });
+        
+        // Enviar al backend - asegurándonos que es un blob válido
         const response = await generateCodeFromScreenshot(
           imageBlob,
           capture.pageInfo.name,
           `Página del proyecto ${project?.nombre || 'sin nombre'}`
         );
+        
+        if (!response.data) {
+          throw new Error('Respuesta inválida del servidor');
+        }
         
         results.push({
           pageInfo: capture.pageInfo,
@@ -365,6 +387,91 @@ const handleSendCaptures = async () => {
     setGeneratingCode(false);
   }
 };
+
+// Función mejorada para capturar el lienzo
+const captureCanvas = () => {
+  if (!stageRef.current || !activePage) return { success: false };
+  
+  // Ocultar temporalmente los controles de transformación
+  const transformer = transformerRef.current;
+  const transformerVisible = transformer ? transformer.isVisible() : false;
+  if (transformer) transformer.visible(false);
+  
+  // Ocultar resaltado de selección si hay algún elemento seleccionado
+  const selectedShape = selectedId ? stageRef.current.findOne('#' + selectedId) : null;
+  let originalStroke, originalStrokeWidth;
+  
+  if (selectedShape) {
+    originalStroke = selectedShape.stroke();
+    originalStrokeWidth = selectedShape.strokeWidth();
+    selectedShape.stroke('rgba(0,0,0,0.2)');
+    selectedShape.strokeWidth(1);
+  }
+  
+  // Forzar redibujado
+  stageRef.current.batchDraw();
+  
+  try {
+    // Generar imagen como URL de datos con una calidad adecuada
+    const dataURL = stageRef.current.toDataURL({
+      pixelRatio: 2, // Mayor calidad
+      mimeType: 'image/png'
+    });
+    
+    // Validar que la URL de datos es correcta
+    if (!dataURL.startsWith('data:image/png;base64,')) {
+      throw new Error('Formato de imagen incorrecto');
+    }
+    
+    // Verificar que la imagen no esté vacía
+    if (dataURL.length < 100) {
+      throw new Error('La captura está vacía o es inválida');
+    }
+    
+    // Obtener información de la página para asociarla con la captura
+    const pageInfo = {
+      id: activePage.id,
+      name: activePage.nombre || activePage.name || `Página ${activePage.id}`,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`Captura realizada. Tamaño: ${Math.round(dataURL.length / 1024)}KB`);
+    
+    // Devolver tanto el dataURL como la información de la página
+    return {
+      success: true,
+      dataURL,
+      pageInfo,
+      download: () => {
+        const link = document.createElement('a');
+        link.download = `canvas-${pageInfo.name}-${Date.now()}.png`;
+        link.href = dataURL;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    };
+  } catch (error) {
+    console.error('Error al capturar el canvas:', error);
+    return { success: false, error };
+  } finally {
+    // Restaurar controles y selección
+    if (transformer) transformer.visible(transformerVisible);
+    if (selectedShape) {
+      selectedShape.stroke(originalStroke);
+      selectedShape.strokeWidth(originalStrokeWidth);
+    }
+    // Forzar redibujado de nuevo
+    stageRef.current.batchDraw();
+  }
+};
+
+// Actualiza window.canvasAPI para exponer esta nueva función mejorada
+if (typeof window !== 'undefined') {
+  window.canvasAPI = {
+    captureCanvas
+  };
+}
 
 const handleRemoveCapture = (captureId) => {
   setCaptures(prevCaptures => prevCaptures.filter(capture => capture.id !== captureId));
