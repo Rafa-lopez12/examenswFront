@@ -75,6 +75,10 @@ export const FiguraProvider =({children})=>{
         });
       }, []);
 
+    const eliminarFiguraLocalmente = useCallback((figuraId) => {
+        setFigura(prevFiguras => prevFiguras.filter(fig => fig.id !== figuraId));
+    }, []);
+
 
     return (
         <FiguraContext.Provider value={{
@@ -82,7 +86,9 @@ export const FiguraProvider =({children})=>{
             loading,
             error,
             getFiguras,
-            actualizarFigurasLocalmente
+            actualizarFigurasLocalmente,
+            eliminarFiguraLocalmente
+
         }}>
             {children}
         </FiguraContext.Provider>

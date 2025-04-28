@@ -239,22 +239,21 @@ const Canvas = () => {
 
   const handleShapeDelete = (id) => {
     try {
-      //console.log('Eliminando figura:', id);
+      console.log('Eliminando figura:', id);
       // La eliminación real se maneja en WorkArea con su socket
       showNotification('Figura eliminada correctamente', 'success');
+      
+      // Cargar las figuras actualizadas después de eliminar
+      if (activePage) {
+        setTimeout(() => {
+          getFiguras(activePage.id);
+        }, 300); // Un pequeño retraso para asegurar que la BD se actualice primero
+      }
     } catch (error) {
       console.error('Error al eliminar figura:', error);
       showNotification('Error al eliminar la figura', 'error');
     }
   };
-
-  if (loading) {
-    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Cargando...</Box>;
-  }
-
-  if (error) {
-    return <Box sx={{ padding: 3, color: 'error.main' }}>{error}</Box>;
-  }
 
 
 
@@ -492,6 +491,9 @@ const handleCloseCodeResultsModal = () => {
 };
 
 
+
+
+
   return (
     <Box sx={{ 
       display: 'flex', 
@@ -536,6 +538,7 @@ const handleCloseCodeResultsModal = () => {
           onShapeSelect={handleShapeSelect}
           onShapeCreate={handleShapeCreate}
           onShapeUpdate={handleShapeUpdate}
+          onShapeDelete={handleShapeDelete}
           pageShapes={figura} // Pasar las figuras de la página actual
 
         />

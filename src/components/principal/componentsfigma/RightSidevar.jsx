@@ -16,7 +16,8 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  IconButton
+  IconButton,
+  Button
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -26,7 +27,8 @@ import {
   BorderStyle as BorderStyleIcon,
   TextFields as TextFieldsIcon,
   AspectRatio as DimensionsIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 
 const drawerWidth = 250;
@@ -490,6 +492,24 @@ const RightSidebar = ({ open, selectedShapeId }) => {
           </AccordionDetails>
         </Accordion>
       )}
+      <Box sx={{ mt: 2, p: 2, display: 'flex', justifyContent: 'center' }}>
+  <Button
+    variant="contained"
+    color="error"
+    startIcon={<DeleteIcon />}
+    onClick={() => {
+      if (window.canvasAPI && window.canvasAPI.deleteSelectedShape) {
+        const success = window.canvasAPI.deleteSelectedShape();
+        if (success) {
+          // Cierra el panel de propiedades o muestra un mensaje
+        }
+      }
+    }}
+    fullWidth
+  >
+    Eliminar Figura
+  </Button>
+</Box>
     </Drawer>
   );
 };

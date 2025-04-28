@@ -1,8 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Typography } from '@mui/material';
-import { ZoomIn, ZoomOut, FitScreen } from '@mui/icons-material';
+import { Box, IconButton, Typography, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { 
+  ZoomIn, 
+  ZoomOut, 
+  FitScreen, 
+  Delete as DeleteIcon, 
+  ContentCopy as DuplicateIcon
+} from '@mui/icons-material';
 import { Stage, Layer, Rect, Circle, Line, Arrow, Text, Transformer } from 'react-konva';
 import useSocketConnection from '../../../hooks/useSocket';
+import { useFigura } from '../../../context/FiguraContext';
 
 const WorkArea = ({ 
   selectedTool, 
@@ -13,6 +20,7 @@ const WorkArea = ({
   onShapeSelect,
   onShapeCreate,
   onShapeUpdate,
+  onShapeDelete,
   pageShapes = [] // Figuras preexistentes para la página activa
 }) => {
   // Estado para todas las formas en el canvas
@@ -29,6 +37,9 @@ const WorkArea = ({
   // Estado para depuración
   const [socketStatus, setSocketStatus] = useState('desconectado');
 
+  // Usar el context de figura para manejar eliminaciones en el contexto global
+  const { eliminarFiguraLocalmente } = useFigura();
+
   // Usar el hook de socket para la comunicación
   const { 
     socket, 
@@ -44,7 +55,7 @@ const WorkArea = ({
     'temp',  // ID temporal que será reemplazado por el backend
     initialShapeProps
   );
-  //console.log('figuras de la pagina:',pageShapes)
+
   const [zoom, setZoom] = useState(1);
   const [selectedId, setSelectedId] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -57,6 +68,9 @@ const WorkArea = ({
   const [textValue, setTextValue] = useState('');
   const textAreaRef = useRef(null);
 
+  // Estado para el menú contextual
+  const [contextMenu, setContextMenu] = useState(null);
+
   // Calcular dimensiones disponibles
   const leftOffset = leftSidebarOpen ? 60 : 0;
   const rightOffset = rightSidebarOpen ? 250 : 0;
@@ -64,7 +78,6 @@ const WorkArea = ({
   // Monitorear el estado del socket y unirse a la sala de la página activa
   useEffect(() => {
     if (socket) {
-      
       setSocketStatus(connected ? 'conectado' : 'desconectado');
       
       // Cuando el socket esté conectado y haya una página activa, unirse a su sala
@@ -77,8 +90,6 @@ const WorkArea = ({
   // Actualizar las figuras cuando cambia la página activa o llegan nuevas figuras del backend
   useEffect(() => {
     if (activePage && Array.isArray(pageShapes)) {
-      //console.log('Cargando figuras para la página:', activePage.id, pageShapes);
-      
       // Transformar las figuras del backend al formato que espera Konva
       const formattedShapes = pageShapes.map(shape => ({
         ...shape,
@@ -153,11 +164,74 @@ const WorkArea = ({
     }
   }, [selectedId]);
 
+  // Función para eliminar una figura seleccionada
+  const handleDeleteSelectedShape = () => {
+    if (!selectedId || !activePage) return;
+    
+    const shapeToDelete = shapes.find(shape => shape.id === selectedId);
+    if (!shapeToDelete) return;
+    
+    try {
+      // Si no es una figura temporal, eliminarla en el backend
+      if (!shapeToDelete.id.startsWith('temp_')) {
+        deleteFigure(shapeToDelete.id, activePage.id);
+        
+        // Actualizar el estado global a través del context
+        eliminarFiguraLocalmente(shapeToDelete.id);
+        
+        // Notificar al componente padre
+        if (onShapeDelete) {
+          onShapeDelete(shapeToDelete.id);
+        }
+      }
+      
+      // Eliminar la figura del estado local
+      setShapes(prevShapes => prevShapes.filter(shape => shape.id !== selectedId));
+      
+      // Limpiar la selección
+      setSelectedId(null);
+      if (onShapeSelect) onShapeSelect(null);
+      
+      // Cerrar el menú contextual si está abierto
+      if (contextMenu) {
+        setContextMenu(null);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error al eliminar figura:', error);
+      return false;
+    }
+  };
+
+  // Manejar teclas para eliminar figuras
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Eliminar con la tecla Supr o Delete
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault();
+        handleDeleteSelectedShape();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedId, activePage]);
+
   // Manejar el clic en el escenario
   const handleStageMouseDown = (e) => {
     // Verificar si hay una página activa
     if (!activePage) {
       console.warn('No hay página activa seleccionada');
+      return;
+    }
+
+    // Cerrar el menú contextual si está abierto
+    if (contextMenu) {
+      setContextMenu(null);
       return;
     }
 
@@ -181,7 +255,6 @@ const WorkArea = ({
     setIsDrawing(true);
     
     // Generar un ID temporal único solo para la interfaz de usuario
-    // Este ID será reemplazado por el ID real del backend cuando se cree la figura
     const tempId = `temp_${tempShapeIndex}`;
     setTempShapeIndex(prevIndex => prevIndex + 1);
     
@@ -360,12 +433,10 @@ const WorkArea = ({
       stroke: finalShape.stroke,
       strokeWidth: finalShape.strokeWidth,
       tipo: finalShape.type, // El backend espera 'tipo' en lugar de 'type'
-      //paginaId: activePage.id,
       vistaId: activePage.id
     };
     
     // Agregar una forma temporal al arreglo de formas para visualización
-    // Esta será reemplazada cuando el backend responda con el ID real
     const tempId = finalShape.tempId;
     const tempShape = { ...finalShape, id: tempId };
     
@@ -504,379 +575,226 @@ const WorkArea = ({
     return shapes.find(shape => shape.id === selectedId);
   };
 
-  // Manejar cambio de color al hacer clic derecho
+  // Manejar clic derecho para abrir menú contextual
   const handleContextMenu = (e) => {
     e.evt.preventDefault();
     const id = e.target.id();
-    
-    // Cambiar el color a uno aleatorio (simplemente como ejemplo)
-    const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
-    
-    const updatedShapes = shapes.map(shape => {
-      if (shape.id === id) {
-        const updatedShape = {
-          ...shape,
-          fill: randomColor,
-        };
-        
-        // Solo actualizar en el backend si la forma no es temporal
-        if (!shape.id.startsWith('temp_')) {
-          // Crear objeto para enviar al backend
-          const shapeForBackend = {
-            id: shape.id, // Necesario para actualizar
-            ...updatedShape,
-            tipo: updatedShape.type,
-            paginaId: activePage?.id,
-            vistaId: activePage?.id
-          };
-          
-          // Enviar al socket y notificar al componente padre
-          updateFigure(shapeForBackend, activePage?.id);
-          if (onShapeUpdate) {
-            onShapeUpdate(shapeForBackend);
-          }
-        }
-        
-        return updatedShape;
-      }
-      return shape;
-    });
-    
-    setShapes(updatedShapes);
     setSelectedId(id);
     if (onShapeSelect) onShapeSelect(id);
+    
+    // Obtener la posición del clic
+    const stage = e.target.getStage();
+    const pointerPosition = stage.getPointerPosition();
+    
+    // Abrir el menú contextual
+    setContextMenu({
+      x: pointerPosition.x,
+      y: pointerPosition.y,
+      id
+    });
   };
 
-  // Función para actualizar propiedades de una forma (llamada desde RightSidebar)
-  const updateShapeProps = (id, newProps) => {
-    const updatedShapes = shapes.map(shape => {
-      if (shape.id === id) {
-        const updatedShape = {
-          ...shape,
-          ...newProps
-        };
+  // Escuchar eventos de creación de figuras para actualizar las temporales
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleFigureCreated = (newFigure) => {
+      console.log('Nueva figura recibida del servidor:', newFigure);
+      
+      // Verificar que tenemos datos válidos
+      if (!newFigure || !newFigure.id) {
+        console.error('Figura recibida inválida:', newFigure);
+        return;
+      }
+      
+      // Si la página activa no coincide, ignorar
+      if (activePage && newFigure.vistaId && newFigure.vistaId !== activePage.id) {
+        console.log('Ignorando figura de otra página');
+        return;
+      }
+      
+      // Transformar la figura al formato que espera Konva
+      const formattedFigure = {
+        ...newFigure,
+        id: newFigure.id.toString(),
+        type: newFigure.tipo || 'rectangle',
+        x: Number(newFigure.x) || 0,
+        y: Number(newFigure.y) || 0,
+        width: Number(newFigure.width) || 100,
+        height: Number(newFigure.height) || 100,
+        radius: Number(newFigure.radius) || 50,
+        fill: newFigure.fill || '#cccccc',
+        stroke: newFigure.stroke || '#000000',
+        strokeWidth: Number(newFigure.strokeWidth) || 1,
+        draggable: true
+      };
+      
+      // Actualizar el estado de las formas
+      setShapes(prevShapes => {
+        // Buscar forma temporal para reemplazar
+        const tempIndex = prevShapes.findIndex(s => s.id.startsWith('temp_'));
         
-        // Solo actualizar en el backend si la forma no es temporal
-        if (!shape.id.startsWith('temp_')) {
-          // Crear objeto para enviar al backend
-          const shapeForBackend = {
-            id: shape.id, // Necesario para actualizar
-            ...updatedShape,
-            tipo: updatedShape.type,
-            paginaId: activePage?.id,
-            vistaId: activePage?.id
-          };
+        if (tempIndex >= 0) {
+          // Reemplazar la forma temporal
+          const updatedShapes = [...prevShapes];
+          updatedShapes[tempIndex] = formattedFigure;
           
-          // Enviar al socket y notificar al componente padre
-          updateFigure(shapeForBackend, activePage?.id);
-          if (onShapeUpdate) {
-            onShapeUpdate(shapeForBackend);
+          // Actualizar selección si corresponde
+          if (selectedId === prevShapes[tempIndex].id) {
+            setSelectedId(formattedFigure.id);
           }
+          
+          return updatedShapes;
         }
         
-        return updatedShape;
-      }
-      return shape;
-    });
-    
-    setShapes(updatedShapes);
-  };
-
-  // Funciones para el zoom
-  const handleZoomIn = () => {
-    setZoom(Math.min(zoom + 0.1, 3));
-  };
-
-  const handleZoomOut = () => {
-    setZoom(Math.max(zoom - 0.1, 0.5));
-  };
-
-  const handleResetZoom = () => {
-    setZoom(1);
-  };
-
-  // Renderizar las formas
-  const renderShape = (shape) => {
-    const commonProps = {
-      id: shape.id,
-      x: shape.x,
-      y: shape.y,
-      fill: shape.fill,
-      stroke: shape.stroke,
-      strokeWidth: shape.strokeWidth,
-      rotation: shape.rotation || 0,
-      draggable: true,
-      onClick: () => {
-        setSelectedId(shape.id);
-        if (onShapeSelect) onShapeSelect(shape.id);
-      },
-      onContextMenu: handleContextMenu,
-      onDragEnd: handleDragEnd,
-      onTransformEnd: handleTransformEnd,
-    };
-
-    switch (shape.type) {
-      case 'rectangle':
-        return (
-          <Rect
-            key={shape.id}
-            {...commonProps}
-            width={shape.width}
-            height={shape.height}
-          />
-        );
-      case 'circle':
-        return (
-          <Circle
-            key={shape.id}
-            {...commonProps}
-            radius={shape.radius}
-          />
-        );
-      case 'line':
-        return (
-          <Line
-            key={shape.id}
-            {...commonProps}
-            points={shape.points}
-          />
-        );
-        case 'text':
-          return (
-            <Text
-            key={shape.id}
-            {...commonProps}
-            text={shape.text}
-            fontSize={shape.fontSize}
-            fontFamily="Arial"
-            width={shape.width}
-            onDblClick={(e) => handleTextDblClick(e, shape)}
-          />
-          );
-      default:
-        return null;
-    }
-  };
-
-  // Renderizar la forma que se está dibujando
-  const renderNewShape = () => {
-    if (!newShapeProps) return null;
-
-    switch (newShapeProps.type) {
-      case 'rectangle':
-        return (
-          <Rect
-            {...newShapeProps}
-            stroke="#000"
-            strokeWidth={1}
-            dash={[5, 5]}
-          />
-        );
-      case 'circle':
-        return (
-          <Circle
-            {...newShapeProps}
-            stroke="#000"
-            strokeWidth={1}
-            dash={[5, 5]}
-          />
-        );
-      case 'line':
-        return (
-          <Line
-            {...newShapeProps}
-            stroke="#000"
-            strokeWidth={1}
-            dash={[5, 5]}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-// Escuchar eventos de creación de figuras para actualizar las temporales
-useEffect(() => {
-  if (!socket) return;
-  
-  const handleFigureCreated = (newFigure) => {
-    console.log('Nueva figura recibida del servidor:', newFigure);
-    
-    // Verificar que tenemos datos válidos
-    if (!newFigure || !newFigure.id) {
-      console.error('Figura recibida inválida:', newFigure);
-      return;
-    }
-    
-    // Si la página activa no coincide, ignorar
-    if (activePage && newFigure.vistaId && newFigure.vistaId !== activePage.id) {
-      console.log('Ignorando figura de otra página');
-      return;
-    }
-    
-    // Transformar la figura al formato que espera Konva
-    const formattedFigure = {
-      ...newFigure,
-      id: newFigure.id.toString(),
-      type: newFigure.tipo || 'rectangle',
-      x: Number(newFigure.x) || 0,
-      y: Number(newFigure.y) || 0,
-      width: Number(newFigure.width) || 100,
-      height: Number(newFigure.height) || 100,
-      radius: Number(newFigure.radius) || 50,
-      fill: newFigure.fill || '#cccccc',
-      stroke: newFigure.stroke || '#000000',
-      strokeWidth: Number(newFigure.strokeWidth) || 1,
-      draggable: true
-    };
-    
-    // Actualizar el estado de las formas
-    setShapes(prevShapes => {
-      // Buscar forma temporal para reemplazar
-      const tempIndex = prevShapes.findIndex(s => s.id.startsWith('temp_'));
-      
-      if (tempIndex >= 0) {
-        // Reemplazar la forma temporal
-        const updatedShapes = [...prevShapes];
-        updatedShapes[tempIndex] = formattedFigure;
-        
-        // Actualizar selección si corresponde
-        if (selectedId === prevShapes[tempIndex].id) {
-          setSelectedId(formattedFigure.id);
+        // Verificar si la figura ya existe
+        const existingIndex = prevShapes.findIndex(s => s.id === formattedFigure.id);
+        if (existingIndex >= 0) {
+          // Actualizar figura existente
+          const updatedShapes = [...prevShapes];
+          updatedShapes[existingIndex] = formattedFigure;
+          return updatedShapes;
         }
         
-        return updatedShapes;
-      }
-      
-      // Verificar si la figura ya existe
-      const existingIndex = prevShapes.findIndex(s => s.id === formattedFigure.id);
-      if (existingIndex >= 0) {
-        // Actualizar figura existente
-        const updatedShapes = [...prevShapes];
-        updatedShapes[existingIndex] = formattedFigure;
-        return updatedShapes;
-      }
-      
-      // Agregar nueva figura
-      return [...prevShapes, formattedFigure];
-    });
-  };
-  
-  socket.on('figureCreated', handleFigureCreated);
-  
-  return () => {
-    socket.off('figureCreated', handleFigureCreated);
-  };
-}, [socket, activePage, selectedId]);
-
-
-// Escuchar actualizaciones de figuras
-useEffect(() => {
-  if (!socket) return;
-  
-  const handleFigureUpdated = (updatedFigure) => {
-    console.log('Actualización de figura recibida:', updatedFigure);
-    
-    // Verificar que tenemos datos válidos
-    if (!updatedFigure || !updatedFigure.id) {
-      console.error('Figura actualizada inválida:', updatedFigure);
-      return;
-    }
-    
-    // Transformar la figura al formato que espera Konva
-    const formattedFigure = {
-      ...updatedFigure,
-      id: updatedFigure.id.toString(),
-      type: updatedFigure.tipo || 'rectangle',
-      x: Number(updatedFigure.x) || 0,
-      y: Number(updatedFigure.y) || 0,
-      width: Number(updatedFigure.width) || 100,
-      height: Number(updatedFigure.height) || 100,
-      radius: Number(updatedFigure.radius) || 50,
-      fill: updatedFigure.fill || '#cccccc',
-      stroke: updatedFigure.stroke || '#000000',
-      strokeWidth: Number(updatedFigure.strokeWidth) || 1,
-      draggable: true
-    };
-    
-    // Actualizar el estado de las formas
-    setShapes(prevShapes => {
-      return prevShapes.map(shape => 
-        shape.id === formattedFigure.id ? formattedFigure : shape
-      );
-    });
-  };
-  
-  const handleUpdateShape = (data) => {
-    console.log('Movimiento de figura recibido:', data);
-    if (!data || (!data.id && !data.figuraId)) return;
-    
-    const figId = data.id || data.figuraId;
-    
-    setShapes(prevShapes => {
-      return prevShapes.map(shape => {
-        if (shape.id === figId) {
-          return { ...shape, ...data };
-        }
-        return shape;
+        // Agregar nueva figura
+        return [...prevShapes, formattedFigure];
       });
-    });
-  };
-  
-  socket.on('figureUpdated', handleFigureUpdated);
-  socket.on('updateShape', handleUpdateShape);
-  
-  return () => {
-    socket.off('figureUpdated', handleFigureUpdated);
-    socket.off('updateShape', handleUpdateShape);
-  };
-}, [socket]);
-
-
-// Escuchar eventos WebSocket para actualizaciones
-useEffect(() => {
-  if (!socket || !activePage) return;
-  
-  const handleCreation = (newFigure) => {
-    console.log('Figura creada recibida por socket:', newFigure);
-    // Llamar a getFiguras para actualizar el estado global
-    if (onShapeCreate) {
-      onShapeCreate(newFigure); // Este callback debería llamar a getFiguras
-    }
-  };
-  
-  const handleUpdate = (updatedFigure) => {
-    console.log('Figura actualizada recibida por socket:', updatedFigure);
-    // Llamar a getFiguras para actualizar el estado global
-    if (onShapeUpdate) {
-      onShapeUpdate(updatedFigure); // Este callback debería llamar a getFiguras
-    }
-  };
-  
-  socket.on('figureCreated', handleCreation);
-  socket.on('figureUpdated', handleUpdate);
-  
-  return () => {
-    socket.off('figureCreated', handleCreation);
-    socket.off('figureUpdated', handleUpdate);
-  };
-}, [socket, activePage, onShapeCreate, onShapeUpdate]);
-
-
-
-
-  // Exponer funciones y datos necesarios
-  // Esta es la clave para comunicarse con otros componentes
-  if (typeof window !== 'undefined') {
-    window.canvasAPI = {
-      getSelectedShape,
-      updateShapeProps,
-      shapes
     };
-  }
+    
+    socket.on('figureCreated', handleFigureCreated);
+    
+    return () => {
+      socket.off('figureCreated', handleFigureCreated);
+    };
+  }, [socket, activePage, selectedId]);
 
+  // Escuchar actualizaciones de figuras
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleFigureUpdated = (updatedFigure) => {
+      console.log('Actualización de figura recibida:', updatedFigure);
+      
+      // Verificar que tenemos datos válidos
+      if (!updatedFigure || !updatedFigure.id) {
+        console.error('Figura actualizada inválida:', updatedFigure);
+        return;
+      }
+      
+      // Transformar la figura al formato que espera Konva
+      const formattedFigure = {
+        ...updatedFigure,
+        id: updatedFigure.id.toString(),
+        type: updatedFigure.tipo || 'rectangle',
+        x: Number(updatedFigure.x) || 0,
+        y: Number(updatedFigure.y) || 0,
+        width: Number(updatedFigure.width) || 100,
+        height: Number(updatedFigure.height) || 100,
+        radius: Number(updatedFigure.radius) || 50,
+        fill: updatedFigure.fill || '#cccccc',
+        stroke: updatedFigure.stroke || '#000000',
+        strokeWidth: Number(updatedFigure.strokeWidth) || 1,
+        draggable: true
+      };
+      
+      // Actualizar el estado de las formas
+      setShapes(prevShapes => {
+        return prevShapes.map(shape => 
+          shape.id === formattedFigure.id ? formattedFigure : shape
+        );
+      });
+    };
+    
+    const handleUpdateShape = (data) => {
+      console.log('Movimiento de figura recibido:', data);
+      if (!data || (!data.id && !data.figuraId)) return;
+      
+      const figId = data.id || data.figuraId;
+      
+      setShapes(prevShapes => {
+        return prevShapes.map(shape => {
+          if (shape.id === figId) {
+            return { ...shape, ...data };
+          }
+          return shape;
+        });
+      });
+    };
+    
+    socket.on('figureUpdated', handleFigureUpdated);
+    socket.on('updateShape', handleUpdateShape);
+    
+    return () => {
+      socket.off('figureUpdated', handleFigureUpdated);
+      socket.off('updateShape', handleUpdateShape);
+    };
+  }, [socket]);
 
-  
+  // Escuchar eventos de eliminación de figuras
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleFigureDeleted = (data) => {
+      console.log('Eliminación de figura recibida:', data);
+      if (!data || !data.id) return;
+      
+      // Actualizar el estado de las formas (eliminar la figura)
+      setShapes(prevShapes => prevShapes.filter(shape => shape.id !== data.id));
+      
+      // Si la figura eliminada era la seleccionada, limpiar la selección
+      if (selectedId === data.id) {
+        setSelectedId(null);
+        if (onShapeSelect) onShapeSelect(null);
+      }
+    };
+    
+    socket.on('figureDeleted', handleFigureDeleted);
+    
+    return () => {
+      socket.off('figureDeleted', handleFigureDeleted);
+    };
+  }, [socket, selectedId, onShapeSelect]);
+
+  // Escuchar eventos WebSocket para actualizaciones
+  useEffect(() => {
+    if (!socket || !activePage) return;
+    
+    const handleCreation = (newFigure) => {
+      console.log('Figura creada recibida por socket:', newFigure);
+      // Llamar a getFiguras para actualizar el estado global
+      if (onShapeCreate) {
+        onShapeCreate(newFigure); // Este callback debería llamar a getFiguras
+      }
+    };
+    
+    const handleUpdate = (updatedFigure) => {
+      console.log('Figura actualizada recibida por socket:', updatedFigure);
+      // Llamar a getFiguras para actualizar el estado global
+      if (onShapeUpdate) {
+        onShapeUpdate(updatedFigure); // Este callback debería llamar a getFiguras
+      }
+    };
+    
+    const handleDelete = (deletedFigure) => {
+      console.log('Figura eliminada recibida por socket:', deletedFigure);
+      // Actualizar el estado global
+      if (onShapeDelete) {
+        onShapeDelete(deletedFigure.id); // Este callback debería llamar a eliminarFiguraLocalmente
+      }
+    };
+    
+    socket.on('figureCreated', handleCreation);
+    socket.on('figureUpdated', handleUpdate);
+    socket.on('figureDeleted', handleDelete);
+    
+    return () => {
+      socket.off('figureCreated', handleCreation);
+      socket.off('figureUpdated', handleUpdate);
+      socket.off('figureDeleted', handleDelete);
+    };
+  }, [socket, activePage, onShapeCreate, onShapeUpdate, onShapeDelete]);
+
+  // Función para manejar el texto editable
   const handleTextDblClick = (e, shape) => {
     // Prevenir acciones por defecto
     e.evt.preventDefault();
@@ -944,88 +862,251 @@ useEffect(() => {
     
     setShapes(updatedShapes);
     setEditingText(null);
-  }
+  };
 
-// Función mejorada para capturar el lienzo y almacenar la imagen
-const captureCanvas = () => {
-  if (!stageRef.current || !activePage) return { success: false };
-  
-  // Ocultar temporalmente los controles de transformación
-  const transformer = transformerRef.current;
-  const transformerVisible = transformer ? transformer.isVisible() : false;
-  if (transformer) transformer.visible(false);
-  
-  // Ocultar resaltado de selección si hay algún elemento seleccionado
-  const selectedShape = selectedId ? stageRef.current.findOne('#' + selectedId) : null;
-  let originalStroke, originalStrokeWidth;
-  
-  if (selectedShape) {
-    originalStroke = selectedShape.stroke();
-    originalStrokeWidth = selectedShape.strokeWidth();
-    selectedShape.stroke('rgba(0,0,0,0.2)');
-    selectedShape.strokeWidth(1);
-  }
-  
-  // Forzar redibujado
-  stageRef.current.batchDraw();
-  
-  try {
-    // Generar imagen como URL de datos
-    const dataURL = stageRef.current.toDataURL({
-      pixelRatio: 2, // Mayor calidad
-      mimeType: 'image/png'
-    });
-    
-    // Obtener información de la página para asociarla con la captura
-    const pageInfo = {
-      id: activePage.id,
-      name: activePage.nombre || activePage.name || `Página ${activePage.id}`,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Devolver tanto el dataURL como la información de la página
-    return {
-      success: true,
-      dataURL,
-      pageInfo,
-      // Para compatibilidad con la función anterior
-      download: () => {
-        const link = document.createElement('a');
-        link.download = `canvas-${pageInfo.name}-${pageInfo.timestamp.slice(0, 10)}.png`;
-        link.href = dataURL;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+  // Escuchar teclas para eliminar
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (editingText) return; // No procesar teclas si estamos editando texto
+      
+      // Tecla Delete o Backspace para eliminar
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault();
+        handleDeleteSelectedShape();
       }
     };
-  } catch (error) {
-    console.error('Error al capturar el canvas:', error);
-    return { success: false, error };
-  } finally {
-    // Restaurar controles y selección
-    if (transformer) transformer.visible(transformerVisible);
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, handleDeleteSelectedShape, editingText]);
+
+  // Función mejorada para capturar el lienzo
+  const captureCanvas = () => {
+    if (!stageRef.current || !activePage) return { success: false };
+    
+    // Ocultar temporalmente los controles de transformación
+    const transformer = transformerRef.current;
+    const transformerVisible = transformer ? transformer.isVisible() : false;
+    if (transformer) transformer.visible(false);
+    
+    // Ocultar resaltado de selección si hay algún elemento seleccionado
+    const selectedShape = selectedId ? stageRef.current.findOne('#' + selectedId) : null;
+    let originalStroke, originalStrokeWidth;
+    
     if (selectedShape) {
-      selectedShape.stroke(originalStroke);
-      selectedShape.strokeWidth(originalStrokeWidth);
+      originalStroke = selectedShape.stroke();
+      originalStrokeWidth = selectedShape.strokeWidth();
+      selectedShape.stroke('rgba(0,0,0,0.2)');
+      selectedShape.strokeWidth(1);
     }
-    // Forzar redibujado de nuevo
+    
+    // Forzar redibujado
     stageRef.current.batchDraw();
-  }
-};
-
-// Exponer funciones y datos necesarios
-if (typeof window !== 'undefined') {
-  window.canvasAPI = {
-    getSelectedShape,
-    updateShapeProps,
-    shapes,
-    captureCanvas
+    
+    try {
+      // Generar imagen como URL de datos
+      const dataURL = stageRef.current.toDataURL({
+        pixelRatio: 2, // Mayor calidad
+        mimeType: 'image/png'
+      });
+      
+      // Obtener información de la página para asociarla con la captura
+      const pageInfo = {
+        id: activePage.id,
+        name: activePage.nombre || activePage.name || `Página ${activePage.id}`,
+        timestamp: new Date().toISOString()
+      };
+      
+      // Devolver tanto el dataURL como la información de la página
+      return {
+        success: true,
+        dataURL,
+        pageInfo,
+        // Para compatibilidad con la función anterior
+        download: () => {
+          const link = document.createElement('a');
+          link.download = `canvas-${pageInfo.name}-${pageInfo.timestamp.slice(0, 10)}.png`;
+          link.href = dataURL;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      };
+    } catch (error) {
+      console.error('Error al capturar el canvas:', error);
+      return { success: false, error };
+    } finally {
+      // Restaurar controles y selección
+      if (transformer) transformer.visible(transformerVisible);
+      if (selectedShape) {
+        selectedShape.stroke(originalStroke);
+        selectedShape.strokeWidth(originalStrokeWidth);
+      }
+      // Forzar redibujado de nuevo
+      stageRef.current.batchDraw();
+    }
   };
-}
+
+  // Exponer funciones y datos necesarios
 
 
+  // Renderizar las formas
+  const renderShape = (shape) => {
+    const commonProps = {
+      id: shape.id,
+      x: shape.x,
+      y: shape.y,
+      fill: shape.fill,
+      stroke: shape.stroke,
+      strokeWidth: shape.strokeWidth,
+      rotation: shape.rotation || 0,
+      draggable: true,
+      onClick: () => {
+        setSelectedId(shape.id);
+        if (onShapeSelect) onShapeSelect(shape.id);
+      },
+      onContextMenu: handleContextMenu,
+      onDragEnd: handleDragEnd,
+      onTransformEnd: handleTransformEnd,
+    };
 
+    switch (shape.type) {
+      case 'rectangle':
+        return (
+          <Rect
+            key={shape.id}
+            {...commonProps}
+            width={shape.width}
+            height={shape.height}
+          />
+        );
+      case 'circle':
+        return (
+          <Circle
+            key={shape.id}
+            {...commonProps}
+            radius={shape.radius}
+          />
+        );
+      case 'line':
+        return (
+          <Line
+            key={shape.id}
+            {...commonProps}
+            points={shape.points}
+          />
+        );
+      case 'text':
+        return (
+          <Text
+            key={shape.id}
+            {...commonProps}
+            text={shape.text}
+            fontSize={shape.fontSize}
+            fontFamily="Arial"
+            width={shape.width}
+            onDblClick={(e) => handleTextDblClick(e, shape)}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
+  // Renderizar la forma que se está dibujando
+  const renderNewShape = () => {
+    if (!newShapeProps) return null;
+
+    switch (newShapeProps.type) {
+      case 'rectangle':
+        return (
+          <Rect
+            {...newShapeProps}
+            stroke="#000"
+            strokeWidth={1}
+            dash={[5, 5]}
+          />
+        );
+      case 'circle':
+        return (
+          <Circle
+            {...newShapeProps}
+            stroke="#000"
+            strokeWidth={1}
+            dash={[5, 5]}
+          />
+        );
+      case 'line':
+        return (
+          <Line
+            {...newShapeProps}
+            stroke="#000"
+            strokeWidth={1}
+            dash={[5, 5]}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+  
+  // Función para actualizar propiedades de una forma (llamada desde RightSidebar)
+  const updateShapeProps = (id, newProps) => {
+    const updatedShapes = shapes.map(shape => {
+      if (shape.id === id) {
+        const updatedShape = {
+          ...shape,
+          ...newProps
+        };
+        
+        // Solo actualizar en el backend si la forma no es temporal
+        if (!shape.id.startsWith('temp_')) {
+          // Crear objeto para enviar al backend
+          const shapeForBackend = {
+            id: shape.id, // Necesario para actualizar
+            ...updatedShape,
+            tipo: updatedShape.type,
+            paginaId: activePage?.id,
+            vistaId: activePage?.id
+          };
+          
+          // Enviar al socket y notificar al componente padre
+          updateFigure(shapeForBackend, activePage?.id);
+          if (onShapeUpdate) {
+            onShapeUpdate(shapeForBackend);
+          }
+        }
+        
+        return updatedShape;
+      }
+      return shape;
+    });
+    
+    setShapes(updatedShapes);
+  };
+
+  // Funciones para el zoom
+  const handleZoomIn = () => {
+    setZoom(Math.min(zoom + 0.1, 3));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(Math.max(zoom - 0.1, 0.5));
+  };
+
+  const handleResetZoom = () => {
+    setZoom(1);
+  };
+
+  if (typeof window !== 'undefined') {
+    window.canvasAPI = {
+      getSelectedShape,
+      updateShapeProps,
+      shapes,
+      captureCanvas,
+      deleteSelectedShape: handleDeleteSelectedShape
+    };
+  }
 
   return (
     <Box
@@ -1132,7 +1213,6 @@ if (typeof window !== 'undefined') {
             onMouseMove={handleStageMouseMove}
             onMouseUp={handleStageMouseUp}
           >
-
             <Layer>
               {/* Fondo de la página */}
               <Rect
@@ -1168,39 +1248,97 @@ if (typeof window !== 'undefined') {
             </Layer>
           </Stage>
 
+          {/* Textarea para edición de texto */}
           {editingText && (
-        <textarea
-          ref={textAreaRef}
-          value={textValue}
-          onChange={(e) => setTextValue(e.target.value)}
-          onBlur={handleTextEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              handleTextEdit();
-            }
-          }}
-          style={{
-            position: 'absolute',
-            top: editingText.position.y + 'px',
-            left: editingText.position.x + 'px',
-            width: editingText.width + 'px',
-            height: editingText.height + 'px',
-            fontSize: editingText.fontSize + 'px',
-            fontFamily: 'Arial',
-            padding: '0',
-            margin: '0',
-            border: '1px solid blue',
-            outline: 'none',
-            resize: 'none',
-            overflow: 'hidden',
-            zIndex: 1000,
-            background: 'white'
-          }}
-        />
-      )}
-
+            <textarea
+              ref={textAreaRef}
+              value={textValue}
+              onChange={(e) => setTextValue(e.target.value)}
+              onBlur={handleTextEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  handleTextEdit();
+                }
+              }}
+              style={{
+                position: 'absolute',
+                top: editingText.position.y + 'px',
+                left: editingText.position.x + 'px',
+                width: editingText.width + 'px',
+                height: editingText.height + 'px',
+                fontSize: editingText.fontSize + 'px',
+                fontFamily: 'Arial',
+                padding: '0',
+                margin: '0',
+                border: '1px solid blue',
+                outline: 'none',
+                resize: 'none',
+                overflow: 'hidden',
+                zIndex: 1000,
+                background: 'white'
+              }}
+            />
+          )}
         </Box>
       </Box>
+
+      {/* Menú contextual */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={() => setContextMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.y, left: contextMenu.x }
+            : undefined
+        }
+      >
+        <MenuItem onClick={handleDeleteSelectedShape}>
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Eliminar</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          // Implementar duplicación de figura
+          if (!selectedId || !activePage) return;
+          
+          const shapeToDuplicate = shapes.find(shape => shape.id === selectedId);
+          if (!shapeToDuplicate) return;
+          
+          // Crear una copia con un offset
+          const newShape = {
+            ...shapeToDuplicate,
+            tempId: `temp_${tempShapeIndex}`,
+            x: shapeToDuplicate.x + 20,
+            y: shapeToDuplicate.y + 20,
+            id: undefined // Eliminar el ID para que el backend genere uno nuevo
+          };
+          
+          setTempShapeIndex(prev => prev + 1);
+          
+          // Crear figura en el backend
+          const shapeForBackend = {
+            ...newShape,
+            tipo: newShape.type,
+            vistaId: activePage.id
+          };
+          
+          delete shapeForBackend.id; // Asegurar que no tenga ID
+          
+          createFigure(shapeForBackend);
+          if (onShapeCreate) {
+            onShapeCreate(shapeForBackend);
+          }
+          
+          setContextMenu(null);
+        }}>
+          <ListItemIcon>
+            <DuplicateIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Duplicar</ListItemText>
+        </MenuItem>
+      </Menu>
     </Box>
   );
 };
