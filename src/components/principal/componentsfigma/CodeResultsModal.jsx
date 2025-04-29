@@ -262,6 +262,7 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
         if (component.css) {
           componentFolder.file(`${component.name}.component.scss`, component.css);
         }
+       
       });
       
       // Añadir servicios
@@ -278,6 +279,10 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
         modules.forEach(module => {
           modulesFolder.file(`${module.name}.module.ts`, module.code);
         });
+      }
+
+      if (result.result.data.appModule) {
+        zip.file('app.module.ts', result.result.data.appModule.code);
       }
       
       // Generar y descargar el ZIP

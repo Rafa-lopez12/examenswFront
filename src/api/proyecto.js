@@ -13,7 +13,7 @@ export const fetchProjectById = (projectId) =>
 
 
 export const updateProject = (projectId, projectData) => 
-  instance.put(`/projects/${projectId}`, projectData);
+  instance.patch(`/proyecto/${projectId}`, projectData);
 
 export const deleteProject = (projectId) => 
   instance.delete(`/projects/${projectId}`);

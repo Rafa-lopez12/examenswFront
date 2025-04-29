@@ -10,7 +10,9 @@ const useSocketConnection = (url, shapeId, initialState) => {
   // Inicializar la conexión del socket
   useEffect(() => {
     const socketIo = io(url, {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'], // Incluir 'polling' para mayor compatibilidad
+      path: '/socket.io/',
+      withCredentials: true,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000

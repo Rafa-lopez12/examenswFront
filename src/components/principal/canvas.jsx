@@ -183,14 +183,24 @@ const Canvas = () => {
     }
   };
 
-  const handleAddPage = () => {
-    const newPage = {
+  const handleAddPage = (customData) => {
+    const newPage = customData || {
       nombre: `Nueva página ${pages.length + 1}`,
       proyectoId: projectId
     };
     
-    crearVista(newPage);
-    showNotification('Nueva página creada', 'success');
+    crearVista(newPage)
+      .then((createdPage) => {
+        showNotification('Nueva página creada', 'success');
+        // Opcionalmente, cambiar a la nueva página
+        if (createdPage) {
+          setActivePage(createdPage);
+        }
+      })
+      .catch((error) => {
+        console.error('Error al crear nueva página:', error);
+        showNotification('Error al crear la página', 'error');
+      });
   };
   
   // Gestión de figuras - Callbacks que serán manejados por WorkArea con su socket
@@ -559,6 +569,7 @@ const handleCloseCodeResultsModal = () => {
         activePage={activePage}
         onPageChange={handlePageChange}
         onAddPage={handleAddPage}
+        projectId={projectId}  // Pasar el ID del proyecto
       />
       
       {/* Indicador de carga de figuras */}

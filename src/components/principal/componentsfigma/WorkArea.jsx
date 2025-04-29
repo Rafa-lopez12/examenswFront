@@ -51,7 +51,7 @@ const WorkArea = ({
     createFigure, 
     deleteFigure 
   } = useSocketConnection(
-    'http://localhost:3000',
+    'https://examensw1.onrender.com',
     'temp',  // ID temporal que será reemplazado por el backend
     initialShapeProps
   );

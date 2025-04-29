@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Grid,
   Card,
@@ -18,17 +18,38 @@ import {
   ViewQuilt as ViewQuiltIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import EditProjectDialog from './EditProyectDialog';
 
 const ProjectList = ({ proyecto, loading, error, onCreateProject }) => {
   const navigate = useNavigate();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
 
   const handleOpenProject = (projectId) => {
     navigate(`/canvas?projectId=${projectId}`);
   };
 
+  const handleEditProject = (project) => {
+    setSelectedProject(project);
+    setEditDialogOpen(true);
+  };
 
-  console.log(loading)
-  console.log(proyecto)
+  const handleDeleteProject = (project) => {
+    setSelectedProject(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    setEditDialogOpen(false);
+    setSelectedProject(null);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setSelectedProject(null);
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -65,7 +86,7 @@ const ProjectList = ({ proyecto, loading, error, onCreateProject }) => {
         </Button>
       </Box>
 
-      {/* {proyecto.le === 0 ? (
+      {/* {!proyecto || proyecto.length === 0 ? (
         <Box sx={{ 
           display: 'flex', 
           flexDirection: 'column', 
@@ -115,10 +136,19 @@ const ProjectList = ({ proyecto, loading, error, onCreateProject }) => {
                   >
                     Abrir
                   </Button>
-                  <Button size="small" startIcon={<EditIcon />}>
+                  <Button 
+                    size="small" 
+                    startIcon={<EditIcon />}
+                    onClick={() => handleEditProject(project)}
+                  >
                     Editar
                   </Button>
-                  <Button size="small" color="error" startIcon={<DeleteIcon />}>
+                  <Button 
+                    size="small" 
+                    color="error" 
+                    startIcon={<DeleteIcon />}
+                    onClick={() => handleDeleteProject(project)}
+                  >
                     Eliminar
                   </Button>
                 </CardActions>
@@ -128,7 +158,7 @@ const ProjectList = ({ proyecto, loading, error, onCreateProject }) => {
         </Grid>
       {/* )} */}
       
-      {/* Fixed action button for mobile */}
+      {/* Botón flotante para dispositivos móviles */}
       <Box sx={{ display: { xs: 'block', md: 'none' } }}>
         <Fab 
           color="primary" 
@@ -139,6 +169,15 @@ const ProjectList = ({ proyecto, loading, error, onCreateProject }) => {
           <AddIcon />
         </Fab>
       </Box>
+
+      {/* Diálogos para editar y eliminar proyectos */}
+      <EditProjectDialog 
+        open={editDialogOpen} 
+        onClose={handleCloseEditDialog} 
+        project={selectedProject} 
+      />
+      
+     
     </>
   );
 };
