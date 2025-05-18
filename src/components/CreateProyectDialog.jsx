@@ -9,7 +9,6 @@ import {
   CircularProgress,
   Alert
 } from '@mui/material';
-import { createProject } from '../services/ProyectService';
 import { useProyecto } from '../context/ProyectoContext';
 
 const CreateProjectDialog = ({ open, onClose, onProjectCreated, userId }) => {

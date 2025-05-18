@@ -8,7 +8,7 @@ import instance from '../api/axios';
  * @param {string} description - Descripción opcional
  * @returns {Promise<Object>} - Respuesta del servidor
  */
-export const generateCodeFromScreenshot = async (image, pageName, description) => {
+export const generateFlutterCodeFromScreenshot = async (image, pageName, description) => {
   const formData = new FormData();
 
   try {
@@ -39,7 +39,7 @@ export const generateCodeFromScreenshot = async (image, pageName, description) =
     formData.append('description', description || '');
     
     // Enviar la solicitud
-    return instance.post('/code-generator/generate-from-screenshot', formData, {
+    return instance.post('/code-generator/generate-flutter-from-screenshot', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }

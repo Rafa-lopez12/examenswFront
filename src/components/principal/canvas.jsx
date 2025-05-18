@@ -9,7 +9,7 @@ import PagesPanel from './componentsfigma/PagesPanel';
 import { useVista } from '../../context/VistaContext';
 import { useFigura } from '../../context/FiguraContext';
 import CapturesPreview from './componentsfigma/CaptureCanvasPreview';
-import { generateCodeFromScreenshot, base64ToBlob } from '../../api/img';
+import { generateFlutterCodeFromScreenshot, base64ToBlob } from '../../api/img';
 import CodeResultsModal from './componentsfigma/CodeResultsModal';
 
 const Canvas = () => {
@@ -343,7 +343,7 @@ const handleSendCaptures = async () => {
         });
         
         // Enviar al backend - asegurándonos que es un blob válido
-        const response = await generateCodeFromScreenshot(
+        const response = await generateFlutterCodeFromScreenshot(
           imageBlob,
           capture.pageInfo.name,
           `Página del proyecto ${project?.nombre || 'sin nombre'}`

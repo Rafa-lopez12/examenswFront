@@ -1,12 +1,33 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import {
+  Box,
+  Container,
+  TextField,
+  Button,
+  Typography,
+  Alert,
+  Paper,
+  Avatar,
+  CircularProgress,
+  Divider,
+  InputAdornment,
+  IconButton
+} from '@mui/material';
+import {
+  LockOutlined as LockIcon,
+  Visibility,
+  VisibilityOff,
+  Email as EmailIcon
+} from '@mui/icons-material';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -40,64 +61,147 @@ const Login = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Iniciar Sesión</h1>
-          <p className="mt-2 text-gray-600">Ingrese sus credenciales para acceder</p>
-        </div>
-        
-        {error && (
-          <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-          </div>
-        )}
-        
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Correo Electrónico
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
+    <Box 
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'linear-gradient(120deg, #e0f7fa 0%, #80deea 100%)',
+        py: 4
+      }}
+    >
+      <Container maxWidth="sm">
+        <Paper 
+          elevation={8} 
+          sx={{ 
+            p: 4, 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center',
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          <Avatar sx={{ m: 1, bgcolor: 'primary.main', width: 56, height: 56 }}>
+            <LockIcon fontSize="large" />
+          </Avatar>
+          
+          <Typography component="h1" variant="h4" fontWeight="bold" sx={{ mt: 1 }}>
+            Bienvenido
+          </Typography>
+          
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            Ingresa tus datos para acceder
+          </Typography>
+          
+          {error && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+          
+          <Box component="form" onSubmit={handleSubmit} sx={{ width: '100%' }}>
+            <TextField
+              margin="normal"
               required
+              fullWidth
+              id="email"
+              label="Correo Electrónico"
+              name="email"
+              autoComplete="email"
+              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailIcon color="primary" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ mb: 2 }}
             />
-          </div>
-          
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Contraseña
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
+            
+            <TextField
+              margin="normal"
               required
+              fullWidth
+              name="password"
+              label="Contraseña"
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockIcon color="primary" />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      aria-label="toggle password visibility"
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                    >
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                )
+              }}
+              sx={{ mb: 3 }}
             />
-          </div>
-          
-          <div>
-            <button
+            
+            <Button
               type="submit"
+              fullWidth
+              variant="contained"
               disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              sx={{ 
+                py: 1.5, 
+                mt: 1, 
+                mb: 3,
+                borderRadius: 2,
+                fontSize: '1rem'
+              }}
             >
-              {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              {loading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Iniciar Sesión'
+              )}
+            </Button>
+            
+            <Divider sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                ¿No tienes una cuenta?
+              </Typography>
+            </Divider>
+            
+            <Button
+              component={Link}
+              to="/register"
+              fullWidth
+              variant="outlined"
+              sx={{ py: 1.5, borderRadius: 2 }}
+            >
+              Regístrate ahora
+            </Button>
+          </Box>
+        </Paper>
+        
+        <Typography 
+          variant="body2" 
+          color="text.secondary" 
+          align="center" 
+          sx={{ mt: 4 }}
+        >
+          © {new Date().getFullYear()} Canvas Colaborativo. Todos los derechos reservados.
+        </Typography>
+      </Container>
+    </Box>
   );
 };
 

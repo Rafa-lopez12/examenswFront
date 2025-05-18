@@ -87,12 +87,12 @@ const CapturesPreview = ({
         ) : (
           <>
             <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Capturas listas para generar código Angular:
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Cada captura será procesada por IA para generar componentes, servicios y módulos Angular.
-              </Typography>
+            <Typography variant="subtitle1" gutterBottom>
+              Capturas listas para generar código Flutter:
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Cada captura será procesada por IA para generar pantallas, widgets, modelos y servicios Flutter.
+            </Typography>
             </Box>
 
             <Grid container spacing={2}>
@@ -204,7 +204,7 @@ const CapturesPreview = ({
             color="primary"
             disabled={captures.length === 0}
           >
-            Generar código Angular ({captures.length})
+            Generar código Flutter ({captures.length})
           </Button>
         </Box>
       </DialogActions>

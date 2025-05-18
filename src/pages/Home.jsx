@@ -5,7 +5,6 @@ import Sidebar from '../components/Sidebar';
 import ProjectList from '../components/ProyectList';
 import TopBar from '../components/TopBar';
 import CreateProjectDialog from '../components/CreateProyectDialog';
-import {fetchUserProjects} from '../services/ProyectService'
 import { useProyecto } from '../context/ProyectoContext';
 
 const Home = () => {

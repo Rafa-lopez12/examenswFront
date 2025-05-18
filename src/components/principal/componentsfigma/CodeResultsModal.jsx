@@ -24,7 +24,8 @@ import {
   Download as DownloadIcon,
   Code as CodeIcon,
   ExpandMore as ExpandMoreIcon,
-  FileDownload as FileDownloadIcon
+  FileDownload as FileDownloadIcon,
+  Smartphone as SmartphoneIcon
 } from '@mui/icons-material';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
@@ -80,7 +81,7 @@ const CodeTab = ({ code, language, filename }) => {
         </Box>
         <Box sx={{ maxHeight: '400px', overflow: 'auto' }}>
           <SyntaxHighlighter
-            language={language}
+            language={language || "dart"}
             style={vs2015}
             customStyle={{ margin: 0, borderRadius: 0 }}
           >
@@ -92,19 +93,51 @@ const CodeTab = ({ code, language, filename }) => {
   );
 };
 
-// Componente para mostrar un componente Angular (TS, HTML, CSS)
-const ComponentAccordion = ({ component, index }) => {
+// Componente para mostrar un archivo Flutter Dart
+const DartFileAccordion = ({ item, itemType }) => {
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
 
   const handleExpandChange = () => {
     setExpanded(!expanded);
   };
 
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
+  // Determinar el nombre del archivo según el tipo
+  const getFileName = () => {
+    const baseName = item.name;
+    switch (itemType) {
+      case 'screen':
+        return `${baseName}.dart`;
+      case 'widget':
+        return `${baseName}.dart`;
+      case 'model':
+        return `${baseName}.dart`;
+      case 'service':
+        return `${baseName}.dart`;
+      default:
+        return `${baseName}.dart`;
+    }
   };
 
+  // Determinar el título según el tipo
+  const getTitle = () => {
+    switch (itemType) {
+      case 'screen':
+        return `${item.name} Screen`;
+      case 'widget':
+        return `${item.name} Widget`;
+      case 'model':
+        return `${item.name} Model`;
+      case 'service':
+        return `${item.name} Service`;
+      default:
+        return item.name;
+    }
+  };
+
+  const getCode = () => {
+    return itemType === 'widget' ? item.dartCode : item.code;
+  };
+  
   return (
     <Accordion 
       expanded={expanded}
@@ -130,61 +163,21 @@ const ComponentAccordion = ({ component, index }) => {
         }}
       >
         <Typography variant="subtitle1">
-          {component.name} Component
+          {getTitle()}
         </Typography>
       </AccordionSummary>
       <AccordionDetails sx={{ p: 0 }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={handleTabChange}
-            aria-label="component tabs"
-            variant="fullWidth"
-          >
-            <Tab label="TypeScript" />
-            <Tab label="HTML" />
-            <Tab label="CSS" />
-          </Tabs>
-        </Box>
         <Box sx={{ p: 2, bgcolor: 'background.paper' }}>
-          {activeTab === 0 && (
-            component.typescript ? (
-              <CodeTab 
-                code={component.typescript} 
-                language="typescript" 
-                filename={`${component.name}.component.ts`} 
-              />
-            ) : (
-              <Typography color="text.secondary" sx={{ p: 2 }}>
-                No hay código TypeScript disponible para este componente.
-              </Typography>
-            )
-          )}
-          {activeTab === 1 && (
-            component.html ? (
-              <CodeTab 
-                code={component.html} 
-                language="html" 
-                filename={`${component.name}.component.html`} 
-              />
-            ) : (
-              <Typography color="text.secondary" sx={{ p: 2 }}>
-                No hay código HTML disponible para este componente.
-              </Typography>
-            )
-          )}
-          {activeTab === 2 && (
-            component.css ? (
-              <CodeTab 
-                code={component.css} 
-                language="css" 
-                filename={`${component.name}.component.scss`} 
-              />
-            ) : (
-              <Typography color="text.secondary" sx={{ p: 2 }}>
-                No hay estilos CSS disponibles para este componente.
-              </Typography>
-            )
+          {getCode() ? (
+            <CodeTab 
+              code={getCode()} 
+              language="dart" 
+              filename={getFileName()} 
+            />
+          ) : (
+            <Typography color="text.secondary" sx={{ p: 2 }}>
+              No hay código disponible para este archivo.
+            </Typography>
           )}
         </Box>
       </AccordionDetails>
@@ -215,7 +208,7 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
       >
         <DialogTitle>
           <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Código Generado</Typography>
+            <Typography variant="h6">Código Flutter Generado</Typography>
             <IconButton onClick={onClose} size="small">
               <CloseIcon />
             </IconButton>
@@ -226,7 +219,7 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
             {loading ? (
               <Box textAlign="center">
                 <CircularProgress />
-                <Typography sx={{ mt: 2 }}>Generando código...</Typography>
+                <Typography sx={{ mt: 2 }}>Generando código Flutter...</Typography>
               </Box>
             ) : (
               <Typography>No hay resultados para mostrar</Typography>
@@ -243,54 +236,95 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
     return null;
   }
 
-  const { components = [], services = [], modules = [] } = result.result.data;
+  const { 
+    screens = [], 
+    widgets = [], 
+    models = [], 
+    services = [], 
+    mainApp = null 
+  } = result.result.data;
   
   const handleExportAll = () => {
     try {
       // Crear un archivo ZIP con todos los archivos
       const zip = new JSZip();
       
-      // Añadir componentes
-      components.forEach(component => {
-        const componentFolder = zip.folder(component.name);
-        if (component.typescript) {
-          componentFolder.file(`${component.name}.component.ts`, component.typescript);
-        }
-        if (component.html) {
-          componentFolder.file(`${component.name}.component.html`, component.html);
-        }
-        if (component.css) {
-          componentFolder.file(`${component.name}.component.scss`, component.css);
-        }
-       
-      });
+      // Crear la estructura de carpetas Flutter estándar
+      const libFolder = zip.folder('lib');
       
-      // Añadir servicios
+      // Añadir archivo main.dart
+      if (mainApp && mainApp.code) {
+        libFolder.file('main.dart', mainApp.code);
+      }
+      
+      // Añadir screens
+      if (screens.length > 0) {
+        const screensFolder = libFolder.folder('screens');
+        screens.forEach(screen => {
+          screensFolder.file(`${screen.name}.dart`, screen.code);
+        });
+      }
+      
+      // Añadir widgets
+      if (widgets.length > 0) {
+        const widgetsFolder = libFolder.folder('widgets');
+        widgets.forEach(widget => {
+          widgetsFolder.file(`${widget.name}.dart`, widget.dartCode || '');
+        });
+      }
+      
+      // Añadir models
+      if (models.length > 0) {
+        const modelsFolder = libFolder.folder('models');
+        models.forEach(model => {
+          modelsFolder.file(`${model.name}.dart`, model.code);
+        });
+      }
+      
+      // Añadir services
       if (services.length > 0) {
-        const servicesFolder = zip.folder('services');
+        const servicesFolder = libFolder.folder('services');
         services.forEach(service => {
-          servicesFolder.file(`${service.name}.service.ts`, service.code);
+          servicesFolder.file(`${service.name}.dart`, service.code);
         });
       }
       
-      // Añadir módulos
-      if (modules.length > 0) {
-        const modulesFolder = zip.folder('modules');
-        modules.forEach(module => {
-          modulesFolder.file(`${module.name}.module.ts`, module.code);
-        });
-      }
+      // Añadir archivo pubspec.yaml básico
+      const packageName = result.pageInfo.name.toLowerCase().replace(/\s+/g, '_');
+      const pubspecYaml = `
+name: ${packageName}
+description: Flutter project generated from screenshot
+publish_to: 'none'
+version: 1.0.0+1
 
-      if (result.result.data.appModule) {
-        zip.file('app.module.ts', result.result.data.appModule.code);
-      }
+environment:
+  sdk: ">=2.17.0 <3.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.5
+  provider: ^6.0.5
+  http: ^0.13.5
+  shared_preferences: ^2.0.15
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.1
+
+flutter:
+  uses-material-design: true
+`;
+      
+      zip.file('pubspec.yaml', pubspecYaml);
       
       // Generar y descargar el ZIP
       zip.generateAsync({type: "blob"}).then(function(content) {
         // Crear enlace de descarga
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `${result.pageInfo.name.replace(/\s+/g, '-')}-angular-code.zip`;
+        link.download = `${result.pageInfo.name.replace(/\s+/g, '-')}-flutter-project.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -306,58 +340,81 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
   // Renderizado condicional según la pestaña activa
   const renderTabContent = () => {
     switch (activeTab) {
-      case 0: // Componentes
-        return components.length > 0 ? (
-          components.map((component, index) => (
-            <ComponentAccordion 
-              key={`component-${index}`}
-              component={component} 
-              index={index} 
+      case 0: // Main App
+        return mainApp ? (
+          <Box mb={2}>
+            <Typography variant="subtitle1" gutterBottom>
+              Main App
+            </Typography>
+            <CodeTab 
+              code={mainApp.code} 
+              language="dart" 
+              filename="main.dart" 
+            />
+          </Box>
+        ) : (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            No se ha generado el archivo main.dart.
+          </Typography>
+        );
+      
+      case 1: // Screens
+        return screens.length > 0 ? (
+          screens.map((screen, index) => (
+            <DartFileAccordion 
+              key={`screen-${index}`}
+              item={screen} 
+              itemType="screen" 
             />
           ))
         ) : (
           <Typography color="text.secondary" sx={{ p: 2 }}>
-            No hay componentes disponibles.
+            No hay pantallas disponibles.
           </Typography>
         );
       
-      case 1: // Servicios
+      case 2: // Widgets
+        return widgets.length > 0 ? (
+          widgets.map((widget, index) => (
+            <DartFileAccordion 
+              key={`widget-${index}`}
+              item={widget} 
+              itemType="widget" 
+            />
+          ))
+        ) : (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            No hay widgets disponibles.
+          </Typography>
+        );
+      
+      case 3: // Models
+        return models.length > 0 ? (
+          models.map((model, index) => (
+            <DartFileAccordion 
+              key={`model-${index}`}
+              item={model} 
+              itemType="model" 
+            />
+          ))
+        ) : (
+          <Typography color="text.secondary" sx={{ p: 2 }}>
+            No hay modelos disponibles.
+          </Typography>
+        );
+      
+      case 4: // Services
         return services.length > 0 ? (
           services.map((service, index) => (
-            <Box key={`service-${index}`} mb={2}>
-              <Typography variant="subtitle1" gutterBottom>
-                {service.name} Service
-              </Typography>
-              <CodeTab 
-                code={service.code} 
-                language="typescript" 
-                filename={`${service.name}.service.ts`} 
-              />
-            </Box>
+            <DartFileAccordion 
+              key={`service-${index}`}
+              item={service} 
+              itemType="service" 
+            />
           ))
         ) : (
           <Typography color="text.secondary" sx={{ p: 2 }}>
             No hay servicios disponibles.
-          </Typography>
-        );
-      
-      case 2: // Módulos
-        return modules.length > 0 ? (
-          modules.map((module, index) => (
-            <Box key={`module-${index}`} mb={2}>
-              <Typography variant="subtitle1" gutterBottom>
-                {module.name} Module
-              </Typography>
-              <CodeTab 
-                code={module.code} 
-                language="typescript" 
-                filename={`${module.name}.module.ts`} 
-              />
-            </Box>
-          ))
-        ) : (
-          <Typography color="text.secondary" sx={{ p: 2 }}>
-            No hay módulos disponibles.
           </Typography>
         );
       
@@ -376,9 +433,9 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Box display="flex" alignItems="center">
-            <CodeIcon sx={{ mr: 1 }} />
+            <SmartphoneIcon sx={{ mr: 1 }} />
             <Typography variant="h6">
-              Código Generado: {result.pageInfo.name}
+              Código Flutter Generado: {result.pageInfo.name}
             </Typography>
           </Box>
           <IconButton onClick={onClose} size="small">
@@ -415,10 +472,14 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
           <Tabs 
             value={activeTab} 
             onChange={(e, newValue) => setActiveTab(newValue)}
+            variant="scrollable"
+            scrollButtons="auto"
           >
-            <Tab label="Componentes" />
+            <Tab label="Main App" />
+            <Tab label="Pantallas" />
+            <Tab label="Widgets" />
+            <Tab label="Modelos" />
             <Tab label="Servicios" />
-            <Tab label="Módulos" />
           </Tabs>
           <Divider />
           
@@ -443,7 +504,7 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
           onClick={handleExportAll}
           disabled={loading}
         >
-          Exportar Todos
+          Exportar Proyecto Flutter
         </Button>
       </DialogActions>
     </Dialog>

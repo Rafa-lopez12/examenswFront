@@ -51,7 +51,7 @@ const WorkArea = ({
     createFigure, 
     deleteFigure 
   } = useSocketConnection(
-    'https://examensw1.onrender.com',
+    'http://localhost:3000',
     'temp',  // ID temporal que será reemplazado por el backend
     initialShapeProps
   );
@@ -142,6 +142,43 @@ const WorkArea = ({
       });
     }
   }, [shapeProps]);
+
+
+  useEffect(() => {
+    if (selectedId && transformerRef.current && stageRef.current) {
+      const selectedNode = stageRef.current.findOne('#' + selectedId);
+      if (!selectedNode) return;
+      
+      const selectedShape = shapes.find(s => s.id === selectedId);
+      if (!selectedShape) return;
+      
+      // Configurar el transformer según el tipo de forma
+      if (selectedShape.type === 'line') {
+        // Para líneas, habilitar solo ciertos controles
+        transformerRef.current.enabledAnchors([
+          'middle-right', // Solo permitir estirar horizontalmente
+          'bottom-center', // Solo permitir estirar verticalmente
+          'bottom-right'   // Permitir estirar en diagonal
+        ]);
+        transformerRef.current.rotateEnabled(true);
+        transformerRef.current.keepRatio(false);
+      } else {
+        // Para otras formas, usar configuración normal
+        transformerRef.current.enabledAnchors([
+          'top-left', 'top-center', 'top-right',
+          'middle-left', 'middle-right',
+          'bottom-left', 'bottom-center', 'bottom-right'
+        ]);
+        transformerRef.current.rotateEnabled(true);
+        transformerRef.current.keepRatio(false);
+      }
+      
+      transformerRef.current.nodes([selectedNode]);
+      transformerRef.current.getLayer().batchDraw();
+    }
+  }, [selectedId, shapes]);
+
+
 
   // Comunicar la forma seleccionada al componente padre
   useEffect(() => {
@@ -285,12 +322,14 @@ const WorkArea = ({
           radius: 0,
         };
         break;
-      case 'line':
-        newShape = {
-          ...newShape,
-          points: [0, 0, 0, 0],
-        };
-        break;
+        case 'line':
+          newShape = {
+            ...newShape,
+            points: [0, 0, 0, 0],
+            stroke: '#333333',
+            strokeWidth: 3, 
+          };
+          break;
       case 'text':
         newShape = {
           ...newShape,
@@ -356,12 +395,12 @@ const WorkArea = ({
           radius: Math.sqrt(dx * dx + dy * dy),
         };
         break;
-      case 'line':
-        updatedShape = {
-          ...updatedShape,
-          points: [0, 0, x - newShapeProps.x, y - newShapeProps.y],
-        };
-        break;
+        case 'line':
+          updatedShape = {
+            ...updatedShape,
+            points: [0, 0, x - newShapeProps.x, y - newShapeProps.y],
+          };
+          break;
       default:
         return;
     }
@@ -397,6 +436,7 @@ const WorkArea = ({
           finalShape.y += finalShape.height;
           finalShape.height = Math.abs(finalShape.height);
         }
+  
         break;
       case 'circle':
         if (finalShape.radius < 5) {
@@ -406,11 +446,27 @@ const WorkArea = ({
         }
         break;
       case 'line':
-        const [x1, y1, x2, y2] = finalShape.points;
-        if (Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1)) < 5) {
-          // Si es muy pequeño, no crear la forma
-          setNewShapeProps(null);
-          return;
+        // const [x1, y1, x2, y2] = finalShape.points;
+        // if (Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1)) < 5) {
+        //   // Si es muy pequeño, no crear la forma
+        //   setNewShapeProps(null);
+        //   return;
+        // }
+        if (finalShape.type === 'line') {
+          // Verificar que la línea tiene una longitud mínima
+          const [x1, y1, x2, y2] = finalShape.points;
+          const length = Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1));
+          
+          if (length < 5) {
+            // Si la línea es muy corta, cancelar la creación
+            setNewShapeProps(null);
+            setIsDrawing(false);
+            return;
+          }
+          
+          // Asegurarse de que la línea tiene todos los atributos necesarios
+          finalShape.stroke = finalShape.stroke || '#333333';
+          finalShape.strokeWidth = finalShape.strokeWidth || 3;
         }
         break;
       default:
@@ -489,6 +545,14 @@ const WorkArea = ({
         } else if (shape.type === 'text') {
           updatedShape.fontSize = Math.max(8, shape.fontSize * scaleY);
           updatedShape.width = Math.max(5, node.width() * scaleX);
+        } else if (shape.type === 'line' && shape.points && shape.points.length >= 4) {
+          let pts = [...shape.points];
+          if (!pts || pts.length < 4) {
+            pts = [0, 0, 50, 50];
+          }
+          const newEndX = pts[2] * scaleX;
+          const newEndY = pts[3] * scaleY;
+          updatedShape.points = [0, 0, newEndX, newEndY];
         }
         
         // Crear objeto para enviar al backend
@@ -547,6 +611,7 @@ const WorkArea = ({
           fill: shape.fill,
           type: shape.type,
           tipo: shape.tipo || shape.type,
+          points: shape.points, // Asegurarse de incluir los puntos para líneas
           pageId: activePage?.id,
           vistaId: activePage?.id
         };
@@ -988,14 +1053,28 @@ const WorkArea = ({
             radius={shape.radius}
           />
         );
-      case 'line':
-        return (
-          <Line
-            key={shape.id}
-            {...commonProps}
-            points={shape.points}
-          />
-        );
+        case 'line':
+          // Modificación para líneas
+          return (
+            <Line
+              key={shape.id}
+              points={shape.points}
+              x={shape.x}
+              y={shape.y}
+              stroke={shape.stroke || '#000000'}
+              strokeWidth={shape.strokeWidth || 2}
+              draggable={true}
+              onClick={() => {
+                setSelectedId(shape.id);
+                if (onShapeSelect) onShapeSelect(shape.id);
+              }}
+              onContextMenu={handleContextMenu}
+              onDragEnd={handleDragEnd}
+              onTransformEnd={handleTransformEnd}
+              id={shape.id}
+              hitStrokeWidth={20}
+            />
+          );
       case 'text':
         return (
           <Text
@@ -1036,15 +1115,17 @@ const WorkArea = ({
             dash={[5, 5]}
           />
         );
-      case 'line':
-        return (
-          <Line
-            {...newShapeProps}
-            stroke="#000"
-            strokeWidth={1}
-            dash={[5, 5]}
-          />
-        );
+        case 'line':
+          return (
+            <Line
+              x={newShapeProps.x}
+              y={newShapeProps.y}
+              points={newShapeProps.points || [0, 0, 0, 0]}
+              stroke={newShapeProps.stroke || '#000000'}
+              strokeWidth={newShapeProps.strokeWidth || 2}
+              dash={[5, 5]}
+            />
+          );
       default:
         return null;
     }

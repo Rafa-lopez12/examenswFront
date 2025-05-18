@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { loginRequest, verifyTokenRequest } from '../api/auth';
+import { loginRequest, registerRequest, verifyTokenRequest } from '../api/auth';
 
 // Crear el contexto
 const AuthContext = createContext(null);
@@ -55,6 +55,22 @@ export const AuthProvider = ({ children }) => {
 
   console.log(currentUser)
   // Función para iniciar sesión
+
+  const register=async(data)=>{
+    try {
+      const res= await registerRequest(data)
+      setCurrentUser(res.data)
+      setIsAuthenticated(true)
+      localStorage.setItem('authToken', res.data.token)
+      return true
+    } catch (error) {
+      console.log('error al registrar', error)
+      return false
+    }
+  }
+
+
+
   const login = async (email, password) => {
     try {
       // Aquí normalmente harías una llamada a tu API de autenticación
@@ -91,6 +107,7 @@ export const AuthProvider = ({ children }) => {
   const value = {
     currentUser,
     isAuthenticated,
+    register,
     login,
     logout,
     loading
