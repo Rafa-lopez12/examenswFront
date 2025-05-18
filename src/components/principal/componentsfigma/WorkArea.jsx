@@ -10,6 +10,9 @@ import {
 import { Stage, Layer, Rect, Circle, Line, Arrow, Text, Transformer } from 'react-konva';
 import useSocketConnection from '../../../hooks/useSocket';
 import { useFigura } from '../../../context/FiguraContext';
+import ImageUploadDialog from './ImageUploadDialog';
+import useImage from 'use-image';
+import TempImage from './TempImage';
 
 const WorkArea = ({ 
   selectedTool, 
@@ -64,6 +67,9 @@ const WorkArea = ({
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
 
+  const [imageUploadOpen, setImageUploadOpen] = useState(false);
+  const [tempImages, setTempImages] = useState({});
+
   const [editingText, setEditingText] = useState(null);
   const [textValue, setTextValue] = useState('');
   const textAreaRef = useRef(null);
@@ -86,6 +92,12 @@ const WorkArea = ({
       }
     }
   }, [socket, connected, activePage, joinPage]);
+
+  useEffect(() => {
+    if (selectedTool === 'image') {
+      setImageUploadOpen(true);
+    }
+  }, [selectedTool]);
 
   // Actualizar las figuras cuando cambia la página activa o llegan nuevas figuras del backend
   useEffect(() => {
@@ -201,6 +213,8 @@ const WorkArea = ({
     }
   }, [selectedId]);
 
+
+
   // Función para eliminar una figura seleccionada
   const handleDeleteSelectedShape = () => {
     if (!selectedId || !activePage) return;
@@ -209,6 +223,16 @@ const WorkArea = ({
     if (!shapeToDelete) return;
     
     try {
+
+      if (shapeToDelete.type === 'tempImage') {
+        // Eliminar imagen temporal
+        setShapes(prevShapes => prevShapes.filter(shape => shape.id !== selectedId));
+        setSelectedId(null);
+        if (onShapeSelect) onShapeSelect(null);
+        
+        console.log('Imagen temporal eliminada:', selectedId);
+        return true;
+      }
       // Si no es una figura temporal, eliminarla en el backend
       if (!shapeToDelete.id.startsWith('temp_')) {
         deleteFigure(shapeToDelete.id, activePage.id);
@@ -306,6 +330,11 @@ const WorkArea = ({
       paginaId: activePage.id, // Agregar el ID de la página activa
       vistaId: activePage.id   // También incluir vistaId para compatibilidad
     };
+
+    if (selectedTool === 'image') {
+      setImageUploadOpen(true);
+      return; // Salir para evitar crear otras formas
+    }
 
     // Propiedades específicas según el tipo de forma
     switch (selectedTool) {
@@ -526,27 +555,57 @@ const WorkArea = ({
     node.scaleX(1);
     node.scaleY(1);
     
-    // Actualizar la forma según su tipo
-    const updatedShapes = shapes.map(shape => {
-      if (shape.id === id) {
+    // Encontrar la forma
+    const shape = shapes.find(s => s.id === id);
+    if (!shape) return;
+    
+    // Caso especial para imágenes temporales
+    if (shape.type === 'tempImage') {
+      const updatedShape = {
+        ...shape,
+        x: node.x(),
+        y: node.y(),
+        width: Math.max(5, node.width() * scaleX),
+        height: Math.max(5, node.height() * scaleY),
+        rotation: node.rotation(),
+      };
+      
+      setShapes(prevShapes => 
+        prevShapes.map(s => 
+          s.id === shape.id ? updatedShape : s
+        )
+      );
+      
+      console.log('Dimensiones de imagen temporal actualizadas:', {
+        id: shape.id,
+        width: updatedShape.width,
+        height: updatedShape.height
+      });
+      
+      return; // Salir para no ejecutar el resto
+    }
+    
+    // Para otros tipos de formas
+    const updatedShapes = shapes.map(s => {
+      if (s.id === id) {
         let updatedShape = {
-          ...shape,
+          ...s,
           x: node.x(),
           y: node.y(),
           rotation: node.rotation(),
         };
         
         // Propiedades específicas por tipo
-        if (shape.type === 'rectangle') {
+        if (s.type === 'rectangle') {
           updatedShape.width = Math.max(5, node.width() * scaleX);
           updatedShape.height = Math.max(5, node.height() * scaleY);
-        } else if (shape.type === 'circle') {
-          updatedShape.radius = Math.max(5, shape.radius * Math.max(scaleX, scaleY));
-        } else if (shape.type === 'text') {
-          updatedShape.fontSize = Math.max(8, shape.fontSize * scaleY);
+        } else if (s.type === 'circle') {
+          updatedShape.radius = Math.max(5, s.radius * Math.max(scaleX, scaleY));
+        } else if (s.type === 'text') {
+          updatedShape.fontSize = Math.max(8, s.fontSize * scaleY);
           updatedShape.width = Math.max(5, node.width() * scaleX);
-        } else if (shape.type === 'line' && shape.points && shape.points.length >= 4) {
-          let pts = [...shape.points];
+        } else if (s.type === 'line' && s.points && s.points.length >= 4) {
+          let pts = [...s.points];
           if (!pts || pts.length < 4) {
             pts = [0, 0, 50, 50];
           }
@@ -557,7 +616,7 @@ const WorkArea = ({
         
         // Crear objeto para enviar al backend
         const shapeForBackend = {
-          id: shape.id, // Aquí sí necesitamos el ID porque estamos actualizando una forma existente
+          id: s.id,
           ...updatedShape,
           tipo: updatedShape.type,
           paginaId: activePage?.id,
@@ -565,7 +624,7 @@ const WorkArea = ({
         };
         
         // Enviar al socket y notificar al componente padre
-        if (!shape.id.startsWith('temp_')) { // Solo actualizar en el backend si no es temporal
+        if (!s.id.startsWith('temp_')) {
           updateFigure(shapeForBackend, activePage?.id);
           if (onShapeUpdate) {
             onShapeUpdate(shapeForBackend);
@@ -574,7 +633,7 @@ const WorkArea = ({
         
         return updatedShape;
       }
-      return shape;
+      return s;
     });
     
     setShapes(updatedShapes);
@@ -589,7 +648,19 @@ const WorkArea = ({
     const shape = shapes.find(s => s.id === id);
     if (!shape) return;
     
-    // Actualizar la posición en el estado
+    // Caso especial para imágenes temporales
+    if (shape.type === 'tempImage') {
+      // Solo actualizar posición local para imágenes temporales
+      setShapes(prevShapes => 
+        prevShapes.map(s => 
+          s.id === id ? { ...s, x, y } : s
+        )
+      );
+      console.log('Posición de imagen temporal actualizada:', { id, x, y });
+      return; // Salir para no ejecutar el resto
+    }
+    
+    // Actualizar la posición en el estado para otros tipos
     const updatedShapes = shapes.map(s => {
       if (s.id === id) {
         const updatedShape = {
@@ -611,7 +682,7 @@ const WorkArea = ({
           fill: shape.fill,
           type: shape.type,
           tipo: shape.tipo || shape.type,
-          points: shape.points, // Asegurarse de incluir los puntos para líneas
+          points: shape.points,
           pageId: activePage?.id,
           vistaId: activePage?.id
         };
@@ -1087,10 +1158,60 @@ const WorkArea = ({
             onDblClick={(e) => handleTextDblClick(e, shape)}
           />
         );
+
+        // case 'image':
+        // return (
+        //   <URLImage
+        //     key={shape.id}
+        //     shape={shape}
+        //     isSelected={selectedId === shape.id}
+        //     onSelect={() => {
+        //       setSelectedId(shape.id);
+        //       if (onShapeSelect) onShapeSelect(shape.id);
+        //     }}
+        //     onUpdate={(updatedProps) => {
+        //       const updatedShapes = shapes.map(s => 
+        //         s.id === shape.id ? { ...s, ...updatedProps } : s
+        //       );
+        //       setShapes(updatedShapes);
+              
+        //       if (!updatedProps.id.startsWith('temp_')) {
+        //         updateFigure(updatedProps, activePage?.id);
+        //         if (onShapeUpdate) {
+        //           onShapeUpdate(updatedProps);
+        //         }
+        //       }
+        //     }}
+        //     onContextMenu={handleContextMenu}
+        //   />
+        // );
+        case 'tempImage':
+          return (
+            <TempImage
+              key={shape.id}
+              imageData={shape}
+              isSelected={selectedId === shape.id}
+              onSelect={() => {
+                setSelectedId(shape.id);
+                if (onShapeSelect) onShapeSelect(shape.id);
+              }}
+              onContextMenu={handleContextMenu}
+            />
+          );
       default:
         return null;
     }
   };
+
+  useEffect(() => {
+    console.log('Estado de formas actualizado:', shapes);
+    
+    // Verificar si hay imágenes temporales
+    const tempImages = shapes.filter(shape => shape.type === 'tempImage');
+    if (tempImages.length > 0) {
+      console.log('Imágenes temporales en el estado:', tempImages);
+    }
+  }, [shapes]);
 
   // Renderizar la forma que se está dibujando
   const renderNewShape = () => {
@@ -1188,6 +1309,253 @@ const WorkArea = ({
       deleteSelectedShape: handleDeleteSelectedShape
     };
   }
+
+
+// Componente para manejar imágenes de Konva
+const URLImage = ({ shape, isSelected, onSelect, onUpdate, onContextMenu }) => {
+  // Usar el hook useImage para cargar la imagen
+  const [image, status] = useImage(shape.imageUrl, 'anonymous');
+  
+  // Estado para seguir las dimensiones originales
+  const [originalSize, setOriginalSize] = useState({
+    width: shape.width || 100,
+    height: shape.height || 100
+  });
+  
+  // Cuando la imagen se carga, actualizamos las dimensiones originales
+  useEffect(() => {
+    if (image && status === 'loaded') {
+      // Solo actualizamos las dimensiones originales una vez
+      if (originalSize.width === 100 && originalSize.height === 100) {
+        // Calcular dimensiones manteniendo proporción si es muy grande
+        let width = image.width;
+        let height = image.height;
+        
+        const maxSize = 400;
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = (height / width) * maxSize;
+            width = maxSize;
+          } else {
+            width = (width / height) * maxSize;
+            height = maxSize;
+          }
+        }
+        
+        setOriginalSize({ width, height });
+        
+        // Solo actualizamos las dimensiones en el objeto shape si no están definidas
+        if (!shape.width || !shape.height) {
+          onUpdate({
+            ...shape,
+            width,
+            height
+          });
+        }
+      }
+    }
+  }, [image, status]);
+  
+  // Si la imagen está cargando, mostramos un placeholder
+  if (status === 'loading' || !image) {
+    return (
+      <Rect
+        x={shape.x}
+        y={shape.y}
+        width={shape.width || 100}
+        height={shape.height || 100}
+        fill="#f0f0f0"
+        stroke="#cccccc"
+        strokeWidth={1}
+        id={shape.id}
+        onClick={onSelect}
+        onTap={onSelect}
+        onContextMenu={onContextMenu}
+        draggable={true}
+      />
+    );
+  }
+  
+  // Si hay error, mostramos un placeholder con color de error
+  if (status === 'failed') {
+    return (
+      <Rect
+        x={shape.x}
+        y={shape.y}
+        width={shape.width || 100}
+        height={shape.height || 100}
+        fill="#ffdddd"
+        stroke="#ff0000"
+        strokeWidth={1}
+        id={shape.id}
+        onClick={onSelect}
+        onTap={onSelect}
+        onContextMenu={onContextMenu}
+        draggable={true}
+      />
+    );
+  }
+  
+  // Si la imagen se cargó correctamente, la mostramos
+  return (
+    <KonvaImage
+      x={shape.x}
+      y={shape.y}
+      width={shape.width || originalSize.width}
+      height={shape.height || originalSize.height}
+      image={image}
+      id={shape.id}
+      onClick={onSelect}
+      onTap={onSelect}
+      onContextMenu={onContextMenu}
+      draggable={true}
+      stroke={isSelected ? '#00a0fc' : undefined}
+      strokeWidth={isSelected ? 2 : 0}
+    />
+  );
+};
+
+
+const handleImageUpload = (dataUrl) => {
+  if (!activePage) {
+    console.log('No hay página activa seleccionada');
+    return;
+  }
+  
+  console.log('Procesando imagen subida...');
+  
+  // Crear una imagen para obtener dimensiones
+  const tempImg = new Image();
+  tempImg.onload = () => {
+    console.log('Imagen cargada, dimensiones:', tempImg.width, 'x', tempImg.height);
+    
+    // Calcular dimensiones proporcionales
+    let width = tempImg.width;
+    let height = tempImg.height;
+    
+    // Escalar si es necesario
+    const maxSize = 400;
+    if (width > maxSize || height > maxSize) {
+      if (width > height) {
+        height = (height / width) * maxSize;
+        width = maxSize;
+      } else {
+        width = (width / height) * maxSize;
+        height = maxSize;
+      }
+    }
+    
+    // Crear ID único
+    const tempId = `temp_image_${Date.now()}`;
+    
+    // Posicionar en el centro del canvas
+    const stage = stageRef.current;
+    const stageWidth = stage.width() / stage.scaleX();
+    const stageHeight = stage.height() / stage.scaleY();
+    const x = (stageWidth - width) / 2;
+    const y = (stageHeight - height) / 2;
+    
+    // Crear objeto de imagen
+    const newImage = {
+      id: tempId,
+      type: 'tempImage',
+      x,
+      y,
+      width,
+      height,
+      imageUrl: dataUrl
+    };
+    
+    console.log('Añadiendo imagen temporal al canvas:', { id: tempId, width, height });
+    
+    // Añadir al estado
+    setShapes(prevShapes => [...prevShapes, newImage]);
+    
+    // Seleccionar la nueva imagen
+    setSelectedId(tempId);
+    if (onShapeSelect) onShapeSelect(tempId);
+    
+    // Volver a la herramienta de selección
+    if (onToolChange) onToolChange('select');
+  };
+  
+  tempImg.onerror = (error) => {
+    console.error('Error al cargar la imagen para dimensionamiento:', error);
+  };
+  
+  tempImg.src = dataUrl;
+};
+
+
+// const TempImage = ({ imageData, isSelected, onSelect, onContextMenu }) => {
+//   // Usar el hook useImage para cargar la imagen
+//   const [image, status] = useImage(imageData.imageUrl);
+  
+//   // Estado para rastrear errores
+//   const [error, setError] = useState(false);
+  
+//   // Efecto para manejar errores de carga
+//   useEffect(() => {
+//     if (status === 'failed') {
+//       console.error('Error al cargar la imagen:', imageData.imageUrl);
+//       setError(true);
+//     }
+//   }, [status, imageData.imageUrl]);
+  
+//   // Log para depuración
+//   useEffect(() => {
+//     console.log('TempImage render:', { 
+//       id: imageData.id, 
+//       status, 
+//       dimensions: { 
+//         x: imageData.x, 
+//         y: imageData.y, 
+//         width: imageData.width, 
+//         height: imageData.height 
+//       }
+//     });
+//   }, [imageData, status]);
+  
+//   // Si la imagen está cargando o hay error, mostrar un placeholder
+//   if (status === 'loading' || !image || error) {
+//     return (
+//       <Rect
+//         x={imageData.x}
+//         y={imageData.y}
+//         width={imageData.width || 100}
+//         height={imageData.height || 100}
+//         fill={error ? "#ffdddd" : "#f0f0f0"}
+//         stroke={error ? "#ff0000" : "#cccccc"}
+//         strokeWidth={1}
+//         id={imageData.id}
+//         onClick={onSelect}
+//         onTap={onSelect}
+//         onContextMenu={onContextMenu}
+//         draggable={true}
+//       />
+//     );
+//   }
+  
+//   // Si la imagen se cargó correctamente, mostrarla
+//   return (
+//     <KonvaImage
+//       x={imageData.x}
+//       y={imageData.y}
+//       width={imageData.width}
+//       height={imageData.height}
+//       image={image}
+//       id={imageData.id}
+//       onClick={onSelect}
+//       onTap={onSelect}
+//       onContextMenu={onContextMenu}
+//       draggable={true}
+//       stroke={isSelected ? '#00a0fc' : undefined}
+//       strokeWidth={isSelected ? 2 : 0}
+//     />
+//   );
+// };
+
+
 
   return (
     <Box
@@ -1420,6 +1788,13 @@ const WorkArea = ({
           <ListItemText>Duplicar</ListItemText>
         </MenuItem>
       </Menu>
+
+      <ImageUploadDialog
+        open={imageUploadOpen}
+        onClose={() => setImageUploadOpen(false)}
+        onImageUpload={handleImageUpload}
+        onToolChange={onToolChange}
+      />
     </Box>
   );
 };
