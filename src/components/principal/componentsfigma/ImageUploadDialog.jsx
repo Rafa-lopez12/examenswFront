@@ -118,6 +118,7 @@ const ImageUploadDialog = ({ open, onClose, onImageUpload, onToolChange }) => {
       </DialogTitle>
 
       <DialogContent dividers>
+        {/* ESTA ES LA PARTE QUE DEBES REEMPLAZAR ↓↓↓ */}
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
@@ -133,6 +134,16 @@ const ImageUploadDialog = ({ open, onClose, onImageUpload, onToolChange }) => {
             mb: 2,
           }}
         >
+          <Typography variant="body1" gutterBottom align="center" color="text.secondary">
+            Sube una imagen de un boceto o diseño de interfaz y la IA la interpretará, 
+            creando las figuras correspondientes en el canvas.
+          </Typography>
+          
+          <Alert severity="info" sx={{ mb: 2, width: '100%' }}>
+            Para mejores resultados, asegúrate de que la imagen sea clara y los elementos estén bien definidos.
+            La IA reconocerá rectángulos, círculos, textos y líneas.
+          </Alert>
+
           <input
             accept="image/*"
             style={{ display: 'none' }}
@@ -150,6 +161,7 @@ const ImageUploadDialog = ({ open, onClose, onImageUpload, onToolChange }) => {
               Seleccionar imagen
             </Button>
           </label>
+        {/* ESTA ES LA PARTE QUE DEBES REEMPLAZAR ↑↑↑ */}
 
           {preview ? (
             <Box

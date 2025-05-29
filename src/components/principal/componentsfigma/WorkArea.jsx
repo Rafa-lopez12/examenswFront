@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Typography, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
+import { Box, IconButton, Typography, Menu, MenuItem, ListItemIcon, ListItemText,Paper, CircularProgress, Alert } from '@mui/material';
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -13,6 +13,7 @@ import { useFigura } from '../../../context/FiguraContext';
 import ImageUploadDialog from './ImageUploadDialog';
 import useImage from 'use-image';
 import TempImage from './TempImage';
+import { generateUIFromImage } from '../../../api/img';
 
 const WorkArea = ({ 
   selectedTool, 
@@ -76,6 +77,9 @@ const WorkArea = ({
 
   // Estado para el menú contextual
   const [contextMenu, setContextMenu] = useState(null);
+
+const [processingImage, setProcessingImage] = useState(false);
+const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
 
   // Calcular dimensiones disponibles
   const leftOffset = leftSidebarOpen ? 60 : 0;
@@ -1311,250 +1315,63 @@ const WorkArea = ({
   }
 
 
-// Componente para manejar imágenes de Konva
-const URLImage = ({ shape, isSelected, onSelect, onUpdate, onContextMenu }) => {
-  // Usar el hook useImage para cargar la imagen
-  const [image, status] = useImage(shape.imageUrl, 'anonymous');
-  
-  // Estado para seguir las dimensiones originales
-  const [originalSize, setOriginalSize] = useState({
-    width: shape.width || 100,
-    height: shape.height || 100
-  });
-  
-  // Cuando la imagen se carga, actualizamos las dimensiones originales
-  useEffect(() => {
-    if (image && status === 'loaded') {
-      // Solo actualizamos las dimensiones originales una vez
-      if (originalSize.width === 100 && originalSize.height === 100) {
-        // Calcular dimensiones manteniendo proporción si es muy grande
-        let width = image.width;
-        let height = image.height;
-        
-        const maxSize = 400;
-        if (width > maxSize || height > maxSize) {
-          if (width > height) {
-            height = (height / width) * maxSize;
-            width = maxSize;
-          } else {
-            width = (width / height) * maxSize;
-            height = maxSize;
-          }
-        }
-        
-        setOriginalSize({ width, height });
-        
-        // Solo actualizamos las dimensiones en el objeto shape si no están definidas
-        if (!shape.width || !shape.height) {
-          onUpdate({
-            ...shape,
-            width,
-            height
-          });
-        }
-      }
+  const handleImageUpload = async (dataUrl) => {
+    if (!activePage) {
+      console.log('No hay página activa seleccionada');
+      setImageProcessingStatus({
+        type: 'error',
+        message: 'No hay página activa seleccionada. Selecciona una página primero.'
+      });
+      return;
     }
-  }, [image, status]);
-  
-  // Si la imagen está cargando, mostramos un placeholder
-  if (status === 'loading' || !image) {
-    return (
-      <Rect
-        x={shape.x}
-        y={shape.y}
-        width={shape.width || 100}
-        height={shape.height || 100}
-        fill="#f0f0f0"
-        stroke="#cccccc"
-        strokeWidth={1}
-        id={shape.id}
-        onClick={onSelect}
-        onTap={onSelect}
-        onContextMenu={onContextMenu}
-        draggable={true}
-      />
-    );
-  }
-  
-  // Si hay error, mostramos un placeholder con color de error
-  if (status === 'failed') {
-    return (
-      <Rect
-        x={shape.x}
-        y={shape.y}
-        width={shape.width || 100}
-        height={shape.height || 100}
-        fill="#ffdddd"
-        stroke="#ff0000"
-        strokeWidth={1}
-        id={shape.id}
-        onClick={onSelect}
-        onTap={onSelect}
-        onContextMenu={onContextMenu}
-        draggable={true}
-      />
-    );
-  }
-  
-  // Si la imagen se cargó correctamente, la mostramos
-  return (
-    <KonvaImage
-      x={shape.x}
-      y={shape.y}
-      width={shape.width || originalSize.width}
-      height={shape.height || originalSize.height}
-      image={image}
-      id={shape.id}
-      onClick={onSelect}
-      onTap={onSelect}
-      onContextMenu={onContextMenu}
-      draggable={true}
-      stroke={isSelected ? '#00a0fc' : undefined}
-      strokeWidth={isSelected ? 2 : 0}
-    />
-  );
-};
-
-
-const handleImageUpload = (dataUrl) => {
-  if (!activePage) {
-    console.log('No hay página activa seleccionada');
-    return;
-  }
-  
-  console.log('Procesando imagen subida...');
-  
-  // Crear una imagen para obtener dimensiones
-  const tempImg = new Image();
-  tempImg.onload = () => {
-    console.log('Imagen cargada, dimensiones:', tempImg.width, 'x', tempImg.height);
     
-    // Calcular dimensiones proporcionales
-    let width = tempImg.width;
-    let height = tempImg.height;
-    
-    // Escalar si es necesario
-    const maxSize = 400;
-    if (width > maxSize || height > maxSize) {
-      if (width > height) {
-        height = (height / width) * maxSize;
-        width = maxSize;
+    try {
+      // Mostrar indicador de carga
+      setProcessingImage(true);
+      setImageProcessingStatus({
+        type: 'info',
+        message: 'Analizando imagen con IA... esto puede tomar unos momentos'
+      });
+      
+      // Enviar la imagen al backend para procesamiento con IA
+      const response = await generateUIFromImage(
+        dataUrl, 
+        activePage.id,
+        `Interpretar dibujo de interfaz para la página ${activePage.nombre || 'sin nombre'}`
+      );
+      
+      // Si el procesamiento fue exitoso
+      if (response.data && response.data.success) {
+        setImageProcessingStatus({
+          type: 'success',
+          message: `Se han creado ${response.data.figuresCount || 'varias'} figuras a partir de la imagen`
+        });
+        
+        // Actualizar las figuras en el canvas
+        if (activePage) {
+          getFiguras(activePage.id);
+        }
+        
+        // Volver a la herramienta de selección
+        if (onToolChange) onToolChange('select');
       } else {
-        width = (width / height) * maxSize;
-        height = maxSize;
+        throw new Error('Error al procesar la imagen: ' + (response.data?.message || 'Error desconocido'));
       }
+    } catch (error) {
+      console.error('Error procesando la imagen:', error);
+      setImageProcessingStatus({
+        type: 'error',
+        message: 'Error al procesar la imagen. Inténtalo con otra imagen o más tarde.'
+      });
+    } finally {
+      setProcessingImage(false);
+      
+      // Limpiar el mensaje después de unos segundos
+      setTimeout(() => {
+        setImageProcessingStatus(null);
+      }, 5000);
     }
-    
-    // Crear ID único
-    const tempId = `temp_image_${Date.now()}`;
-    
-    // Posicionar en el centro del canvas
-    const stage = stageRef.current;
-    const stageWidth = stage.width() / stage.scaleX();
-    const stageHeight = stage.height() / stage.scaleY();
-    const x = (stageWidth - width) / 2;
-    const y = (stageHeight - height) / 2;
-    
-    // Crear objeto de imagen
-    const newImage = {
-      id: tempId,
-      type: 'tempImage',
-      x,
-      y,
-      width,
-      height,
-      imageUrl: dataUrl
-    };
-    
-    console.log('Añadiendo imagen temporal al canvas:', { id: tempId, width, height });
-    
-    // Añadir al estado
-    setShapes(prevShapes => [...prevShapes, newImage]);
-    
-    // Seleccionar la nueva imagen
-    setSelectedId(tempId);
-    if (onShapeSelect) onShapeSelect(tempId);
-    
-    // Volver a la herramienta de selección
-    if (onToolChange) onToolChange('select');
   };
-  
-  tempImg.onerror = (error) => {
-    console.error('Error al cargar la imagen para dimensionamiento:', error);
-  };
-  
-  tempImg.src = dataUrl;
-};
-
-
-// const TempImage = ({ imageData, isSelected, onSelect, onContextMenu }) => {
-//   // Usar el hook useImage para cargar la imagen
-//   const [image, status] = useImage(imageData.imageUrl);
-  
-//   // Estado para rastrear errores
-//   const [error, setError] = useState(false);
-  
-//   // Efecto para manejar errores de carga
-//   useEffect(() => {
-//     if (status === 'failed') {
-//       console.error('Error al cargar la imagen:', imageData.imageUrl);
-//       setError(true);
-//     }
-//   }, [status, imageData.imageUrl]);
-  
-//   // Log para depuración
-//   useEffect(() => {
-//     console.log('TempImage render:', { 
-//       id: imageData.id, 
-//       status, 
-//       dimensions: { 
-//         x: imageData.x, 
-//         y: imageData.y, 
-//         width: imageData.width, 
-//         height: imageData.height 
-//       }
-//     });
-//   }, [imageData, status]);
-  
-//   // Si la imagen está cargando o hay error, mostrar un placeholder
-//   if (status === 'loading' || !image || error) {
-//     return (
-//       <Rect
-//         x={imageData.x}
-//         y={imageData.y}
-//         width={imageData.width || 100}
-//         height={imageData.height || 100}
-//         fill={error ? "#ffdddd" : "#f0f0f0"}
-//         stroke={error ? "#ff0000" : "#cccccc"}
-//         strokeWidth={1}
-//         id={imageData.id}
-//         onClick={onSelect}
-//         onTap={onSelect}
-//         onContextMenu={onContextMenu}
-//         draggable={true}
-//       />
-//     );
-//   }
-  
-//   // Si la imagen se cargó correctamente, mostrarla
-//   return (
-//     <KonvaImage
-//       x={imageData.x}
-//       y={imageData.y}
-//       width={imageData.width}
-//       height={imageData.height}
-//       image={image}
-//       id={imageData.id}
-//       onClick={onSelect}
-//       onTap={onSelect}
-//       onContextMenu={onContextMenu}
-//       draggable={true}
-//       stroke={isSelected ? '#00a0fc' : undefined}
-//       strokeWidth={isSelected ? 2 : 0}
-//     />
-//   );
-// };
-
 
 
   return (
@@ -1696,6 +1513,63 @@ const handleImageUpload = (dataUrl) => {
               />
             </Layer>
           </Stage>
+
+          {processingImage && (
+  <Box
+    sx={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      flexDirection: 'column'
+    }}
+  >
+    <Paper
+      sx={{
+        p: 4,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        maxWidth: 400
+      }}
+    >
+      <CircularProgress size={60} sx={{ mb: 2 }} />
+      <Typography variant="h6" gutterBottom>
+        Procesando Imagen
+      </Typography>
+      <Typography variant="body1" align="center" color="text.secondary">
+        La IA está analizando la imagen y creando figuras...
+      </Typography>
+    </Paper>
+  </Box>
+)}
+
+{imageProcessingStatus && (
+  <Box
+    sx={{
+      position: 'fixed',
+      bottom: 20,
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 9999
+    }}
+  >
+    <Alert
+      severity={imageProcessingStatus.type}
+      onClose={() => setImageProcessingStatus(null)}
+      sx={{ minWidth: '300px', boxShadow: 3 }}
+    >
+      {imageProcessingStatus.message}
+    </Alert>
+  </Box>
+)}
+
 
           {/* Textarea para edición de texto */}
           {editingText && (

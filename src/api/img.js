@@ -108,3 +108,42 @@ export const base64ToBlob = async (dataUrl) => {
   }
 };
 
+
+export const generateUIFromImage = async (image, vistaId, description = '') => {
+  const formData = new FormData();
+
+  try {
+    let imageToSend;
+    
+    if (typeof image === 'string') {
+      if (image.startsWith('data:image')) {
+        imageToSend = await base64ToBlob(image);
+      } else {
+        imageToSend = await base64ToBlob(`data:image/png;base64,${image}`);
+      }
+    } else if (image instanceof Blob || image instanceof File) {
+      imageToSend = image;
+    } else {
+      console.error('Formato de imagen no soportado:', typeof image);
+      throw new Error('Formato de imagen no soportado');
+    }
+    
+    // Añadir la imagen al FormData
+    formData.append('image', imageToSend, `ui-sketch-${Date.now()}.png`);
+    
+    // Añadir otros campos
+    formData.append('vistaId', vistaId);
+    formData.append('description', description);
+    
+    // Enviar la solicitud
+    return instance.post('/code-generator/generate-ui-from-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  } catch (error) {
+    console.error('Error preparando la imagen para enviar:', error);
+    throw error;
+  }
+};
+
