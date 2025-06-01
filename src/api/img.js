@@ -145,5 +145,34 @@ export const generateUIFromImage = async (image, vistaId, description = '') => {
     console.error('Error preparando la imagen para enviar:', error);
     throw error;
   }
+
+  
+};
+
+
+export const generateUIFromPrompt = async (prompt, vistaId, options = {}) => {
+  try {
+    if (!prompt || !prompt.trim()) {
+      throw new Error('El prompt es requerido');
+    }
+    
+    if (!vistaId) {
+      throw new Error('El ID de la vista es requerido');
+    }
+    
+    // Enviar la solicitud al backend
+    return instance.post('/code-generator/generate-ui-from-prompt', {
+      prompt: prompt.trim(),
+      vistaId: vistaId,
+      options: {
+        style: options.style || 'modern',
+        colorScheme: options.colorScheme || 'default',
+        complexity: options.complexity || 'medium'
+      }
+    });
+  } catch (error) {
+    console.error('Error preparando el prompt para enviar:', error);
+    throw error;
+  }
 };
 

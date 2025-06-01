@@ -14,6 +14,8 @@ import ImageUploadDialog from './ImageUploadDialog';
 import useImage from 'use-image';
 import TempImage from './TempImage';
 import { generateUIFromImage } from '../../../api/img';
+import PromptUIDialog from './PromptUIDialog';
+import { generateUIFromPrompt } from '../../../api/img';
 
 const WorkArea = ({ 
   selectedTool, 
@@ -68,9 +70,10 @@ const WorkArea = ({
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
 
-  const [imageUploadOpen, setImageUploadOpen] = useState(false);
-  const [tempImages, setTempImages] = useState({});
+  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
 
+  const [stageSize, setStageSize] = useState({ width: 1200, height: 800 });
+  const [imageUploadOpen, setImageUploadOpen] = useState(false);
   const [editingText, setEditingText] = useState(null);
   const [textValue, setTextValue] = useState('');
   const textAreaRef = useRef(null);
@@ -102,6 +105,36 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
       setImageUploadOpen(true);
     }
   }, [selectedTool]);
+
+  useEffect(() => {
+    if (selectedTool === 'ai-prompt') {
+      setPromptDialogOpen(true);
+    }
+  }, [selectedTool]);
+
+
+  useEffect(() => {
+    const updateStageSize = () => {
+      const leftOffset = leftSidebarOpen ? 60 : 0;
+      const rightOffset = rightSidebarOpen ? 250 : 0;
+      
+      // Calcular el área disponible EXACTA del viewport
+      const availableWidth = window.innerWidth - leftOffset - rightOffset - 40;
+      const availableHeight = window.innerHeight - 48 - 40; // 48px del header, 40px de padding
+      
+      // NO usar Math.max, usar el área disponible real
+      const width = Math.max(800, availableWidth); // Mínimo razonable
+      const height = Math.max(600, availableHeight); // Mínimo razonable
+      
+      setStageSize({ width, height });
+      console.log('Nuevo tamaño del stage:', { width, height });
+    };
+  
+    updateStageSize();
+    window.addEventListener('resize', updateStageSize);
+    
+    return () => window.removeEventListener('resize', updateStageSize);
+  }, [leftSidebarOpen, rightSidebarOpen]);
 
   // Actualizar las figuras cuando cambia la página activa o llegan nuevas figuras del backend
   useEffect(() => {
@@ -1087,6 +1120,61 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
     }
   };
 
+
+  const handlePromptSubmit = async (prompt, options = {}) => {
+    if (!activePage) {
+      console.log('No hay página activa seleccionada');
+      setImageProcessingStatus({
+        type: 'error',
+        message: 'No hay página activa seleccionada. Selecciona una página primero.'
+      });
+      return;
+    }
+    
+    try {
+      // Mostrar indicador de carga
+      setProcessingImage(true);
+      setImageProcessingStatus({
+        type: 'info',
+        message: `Generando interfaz ${options.style || 'moderna'} con esquema ${options.colorScheme || 'por defecto'}... esto puede tomar unos momentos`
+      });
+      
+      // Enviar el prompt al backend para procesamiento con IA
+      const response = await generateUIFromPrompt(prompt, activePage.id, options);
+      
+      // Si el procesamiento fue exitoso
+      if (response.data && response.data.success) {
+        setImageProcessingStatus({
+          type: 'success',
+          message: `Se han creado ${response.data.figuresCount || 'varias'} figuras con estilo ${options.style || 'moderno'}`
+        });
+        
+        // Actualizar las figuras en el canvas
+        if (activePage) {
+          getFiguras(activePage.id);
+        }
+        
+        // Volver a la herramienta de selección
+        if (onToolChange) onToolChange('select');
+      } else {
+        throw new Error('Error al procesar el prompt: ' + (response.data?.message || 'Error desconocido'));
+      }
+    } catch (error) {
+      console.error('Error procesando el prompt:', error);
+      setImageProcessingStatus({
+        type: 'error',
+        message: 'Error al procesar el prompt. Inténtalo con una descripción diferente o ajusta las opciones de personalización.'
+      });
+    } finally {
+      setProcessingImage(false);
+      
+      // Limpiar el mensaje después de unos segundos
+      setTimeout(() => {
+        setImageProcessingStatus(null);
+      }, 5000);
+    }
+  };
+
   // Exponer funciones y datos necesarios
 
 
@@ -1163,32 +1251,6 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
           />
         );
 
-        // case 'image':
-        // return (
-        //   <URLImage
-        //     key={shape.id}
-        //     shape={shape}
-        //     isSelected={selectedId === shape.id}
-        //     onSelect={() => {
-        //       setSelectedId(shape.id);
-        //       if (onShapeSelect) onShapeSelect(shape.id);
-        //     }}
-        //     onUpdate={(updatedProps) => {
-        //       const updatedShapes = shapes.map(s => 
-        //         s.id === shape.id ? { ...s, ...updatedProps } : s
-        //       );
-        //       setShapes(updatedShapes);
-              
-        //       if (!updatedProps.id.startsWith('temp_')) {
-        //         updateFigure(updatedProps, activePage?.id);
-        //         if (onShapeUpdate) {
-        //           onShapeUpdate(updatedProps);
-        //         }
-        //       }
-        //     }}
-        //     onContextMenu={handleContextMenu}
-        //   />
-        // );
         case 'tempImage':
           return (
             <TempImage
@@ -1471,8 +1533,8 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
         >
           <Stage
             ref={stageRef}
-            width={window.innerWidth - leftOffset - rightOffset}
-            height={window.innerHeight} // Usar toda la altura disponible
+            width={stageSize.width}
+            height={stageSize.height}
             scaleX={zoom}
             scaleY={zoom}
             onMouseDown={handleStageMouseDown}
@@ -1484,8 +1546,8 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
               <Rect
                 x={0}
                 y={0}
-                width={1200}
-                height={800}
+                width={stageSize.width}
+                height={stageSize.height}
                 fill="#ffffff"
                 shadowColor="rgba(0,0,0,0.2)"
                 shadowBlur={10}
@@ -1667,6 +1729,12 @@ const [imageProcessingStatus, setImageProcessingStatus] = useState(null);
         open={imageUploadOpen}
         onClose={() => setImageUploadOpen(false)}
         onImageUpload={handleImageUpload}
+        onToolChange={onToolChange}
+      />
+      <PromptUIDialog
+        open={promptDialogOpen}
+        onClose={() => setPromptDialogOpen(false)}
+        onPromptSubmit={handlePromptSubmit}
         onToolChange={onToolChange}
       />
     </Box>

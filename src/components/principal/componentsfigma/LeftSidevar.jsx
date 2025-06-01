@@ -23,11 +23,13 @@ import {
   Create as DrawIcon,
   ArrowForward as ArrowIcon,
   FormatColorFill as FillIcon,
-  Palette as ColorIcon
+  Palette as ColorIcon,
+  AutoAwesome as AIPromptIcon
 } from '@mui/icons-material';
 
 const TOOLS = [
   { id: 'select', name: 'Seleccionar', icon: <SelectIcon />, tooltip: 'Herramienta de selección' },
+  { id: 'ai-prompt', name: 'IA Prompt', icon: <AIPromptIcon />, tooltip: 'Crear interfaz con IA mediante texto' },
   { id: 'pen', name: 'Lápiz', icon: <PenIcon />, tooltip: 'Dibujo a mano alzada' },
   { id: 'rectangle', name: 'Rectángulo', icon: <RectangleIcon />, tooltip: 'Crear rectángulos' },
   { id: 'circle', name: 'Círculo', icon: <CircleIcon />, tooltip: 'Crear círculos' },
