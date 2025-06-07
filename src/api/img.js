@@ -8,23 +8,19 @@ import instance from '../api/axios';
  * @param {string} description - Descripción opcional
  * @returns {Promise<Object>} - Respuesta del servidor
  */
-export const generateFlutterCodeFromScreenshot = async (image, pageName, description) => {
+export const generateFlutterCodeFromScreenshot = async (image, pageName, description, projectId = null) => {
   const formData = new FormData();
 
   try {
     let imageToSend;
     
     if (typeof image === 'string') {
-      // Si es una cadena, verificar si es base64 con prefijo o sin él
       if (image.startsWith('data:image')) {
-        // Si tiene prefijo, convertir a Blob
         imageToSend = await base64ToBlob(image);
       } else {
-        // Si no tiene prefijo, intentar tratarlo como base64 crudo
         imageToSend = await base64ToBlob(`data:image/png;base64,${image}`);
       }
     } else if (image instanceof Blob || image instanceof File) {
-      // Si ya es un Blob o File, usar directamente
       imageToSend = image;
     } else {
       console.error('Formato de imagen no soportado:', typeof image);
@@ -38,6 +34,11 @@ export const generateFlutterCodeFromScreenshot = async (image, pageName, descrip
     formData.append('pageName', pageName);
     formData.append('description', description || '');
     
+    // NUEVO: Añadir projectId si está disponible
+    if (projectId) {
+      formData.append('projectId', projectId);
+    }
+    
     // Enviar la solicitud
     return instance.post('/code-generator/generate-flutter-from-screenshot', formData, {
       headers: {
@@ -49,6 +50,7 @@ export const generateFlutterCodeFromScreenshot = async (image, pageName, descrip
     throw error;
   }
 };
+
 
 /**
  * Convierte un string base64 o una URL de datos en un Blob

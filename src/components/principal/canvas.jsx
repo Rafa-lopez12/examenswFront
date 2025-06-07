@@ -309,7 +309,6 @@ const prepareCapturesToSend = () => {
   return captureData;
 };
 
-// Actualización de la función handleSendCaptures en Canvas.jsx
 
 const handleSendCaptures = async () => {
   try {
@@ -346,7 +345,8 @@ const handleSendCaptures = async () => {
         const response = await generateFlutterCodeFromScreenshot(
           imageBlob,
           capture.pageInfo.name,
-          `Página del proyecto ${project?.nombre || 'sin nombre'}`
+          `Página del proyecto ${project?.nombre || 'sin nombre'}`,
+          projectId
         );
         
         if (!response.data) {
@@ -376,6 +376,7 @@ const handleSendCaptures = async () => {
     setCodeResults(results);
     
     const successCount = results.filter(r => r.result?.success).length;
+
     showNotification(
       `Se generó código para ${successCount} de ${captures.length} capturas`, 
       successCount === captures.length ? 'success' : 'warning'

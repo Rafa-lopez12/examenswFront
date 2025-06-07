@@ -16,7 +16,8 @@ import {
   CircularProgress,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Chip
 } from '@mui/material';
 import {
   ContentCopy as ContentCopyIcon,
@@ -246,26 +247,43 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
   
   const handleExportAll = () => {
     try {
-      // Crear un archivo ZIP con todos los archivos
       const zip = new JSZip();
-      
-      // Crear la estructura de carpetas Flutter estándar
       const libFolder = zip.folder('lib');
       
-      // Añadir archivo main.dart
-      if (mainApp && mainApp.code) {
-        libFolder.file('main.dart', mainApp.code);
+      // VERSIÓN SIMPLE: Solo necesitamos el main.dart mejorado
+      if (result.result.data?.navigationFiles) {
+        const navFiles = result.result.data.navigationFiles.files;
+        
+        // Solo usar el main.dart que ya incluye todo
+        if (navFiles.mainApp) {
+          libFolder.file('main.dart', navFiles.mainApp);
+        } else if (mainApp && mainApp.code) {
+          libFolder.file('main.dart', mainApp.code);
+        }
+        
+        // OPCIONAL: Agregar archivo de rutas separado si existe
+        if (navFiles.simpleRoutes) {
+          const utilsFolder = libFolder.folder('utils');
+          utilsFolder.file('routes.dart', navFiles.simpleRoutes);
+        }
+      } else {
+        // Si no hay navegación, usar main.dart original
+        if (mainApp && mainApp.code) {
+          libFolder.file('main.dart', mainApp.code);
+        }
       }
       
-      // Añadir screens
+      // Añadir screens con navegación automática
       if (screens.length > 0) {
         const screensFolder = libFolder.folder('screens');
         screens.forEach(screen => {
-          screensFolder.file(`${screen.name}.dart`, screen.code);
+          // Modificar cada screen para incluir navegación simple
+          const enhancedScreenCode = addSimpleNavigationToScreen(screen.code, screen.name);
+          screensFolder.file(`${screen.name}.dart`, enhancedScreenCode);
         });
       }
       
-      // Añadir widgets
+      // Añadir widgets, models, services normalmente
       if (widgets.length > 0) {
         const widgetsFolder = libFolder.folder('widgets');
         widgets.forEach(widget => {
@@ -273,7 +291,6 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
         });
       }
       
-      // Añadir models
       if (models.length > 0) {
         const modelsFolder = libFolder.folder('models');
         models.forEach(model => {
@@ -281,7 +298,6 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
         });
       }
       
-      // Añadir services
       if (services.length > 0) {
         const servicesFolder = libFolder.folder('services');
         services.forEach(service => {
@@ -289,53 +305,119 @@ const CodeResultsModal = ({ open, onClose, codeResults, loading }) => {
         });
       }
       
-      // Añadir archivo pubspec.yaml básico
+      // Pubspec.yaml simplificado
       const packageName = result.pageInfo.name.toLowerCase().replace(/\s+/g, '_');
       const pubspecYaml = `
-name: ${packageName}
-description: Flutter project generated from screenshot
-publish_to: 'none'
-version: 1.0.0+1
-
-environment:
-  sdk: ">=2.17.0 <3.0.0"
-
-dependencies:
+  name: ${packageName}
+  description: Flutter project with simple navigation
+  version: 1.0.0+1
+  
+  environment:
+    sdk: ">=2.17.0 <3.0.0"
+  
+  dependencies:
+    flutter:
+      sdk: flutter
+    cupertino_icons: ^1.0.5
+  
+  dev_dependencies:
+    flutter_test:
+      sdk: flutter
+    flutter_lints: ^2.0.1
+  
   flutter:
-    sdk: flutter
-  cupertino_icons: ^1.0.5
-  provider: ^6.0.5
-  http: ^0.13.5
-  shared_preferences: ^2.0.15
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^2.0.1
-
-flutter:
-  uses-material-design: true
-`;
+    uses-material-design: true
+  `;
       
       zip.file('pubspec.yaml', pubspecYaml);
       
+      // README simplificado
+      const hasNavigation = result.result.data?.navigationFiles;
+      const readmeContent = `# ${result.pageInfo.name} - Flutter Project
+  
+  ## Navegación Simple
+  
+  ${hasNavigation ? `
+  Esta aplicación incluye navegación automática entre pantallas.
+  
+  ### Cómo navegar:
+  
+  \`\`\`dart
+  // Ir a otra pantalla
+  AppNavigation.goTo(context, AppNavigation.nombrePantalla);
+  
+  // Reemplazar pantalla actual
+  AppNavigation.goToReplace(context, AppNavigation.otraPantalla);
+  
+  // Volver atrás
+  AppNavigation.goBack(context);
+  \`\`\`
+  
+  ### Pantallas disponibles:
+  ${screens.map(screen => `- ${screen.name}`).join('\n')}
+  
+  ### Drawer automático:
+  Todas las pantallas incluyen un menú lateral con navegación automática a todas las otras pantallas.
+  
+  ` : `
+  Esta aplicación no incluye navegación automática. 
+  Puedes agregar navegación manualmente usando Navigator.pushNamed().
+  `}
+  
+  ## Instalación
+  
+  1. \`flutter pub get\`
+  2. \`flutter run\`
+  
+  ## Estructura
+  
+  - \`lib/main.dart\` - Aplicación principal con rutas
+  - \`lib/screens/\` - Pantallas de la aplicación
+  - \`lib/widgets/\` - Widgets reutilizables
+  - \`lib/models/\` - Modelos de datos
+  - \`lib/services/\` - Servicios
+  
+  ${hasNavigation ? '## Nota: La navegación está integrada directamente en main.dart para simplicidad.' : ''}
+  `;
+      
+      zip.file('README.md', readmeContent);
+      
       // Generar y descargar el ZIP
       zip.generateAsync({type: "blob"}).then(function(content) {
-        // Crear enlace de descarga
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `${result.pageInfo.name.replace(/\s+/g, '-')}-flutter-project.zip`;
+        const fileName = hasNavigation 
+          ? `${result.pageInfo.name.replace(/\s+/g, '-')}-flutter-simple-navigation.zip`
+          : `${result.pageInfo.name.replace(/\s+/g, '-')}-flutter-project.zip`;
+        link.download = fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       });
     } catch (error) {
-      console.error('Error al exportar todos los archivos:', error);
-      
-      // Fallback: Exportar cada archivo individualmente
-      alert('No se pudo crear el archivo ZIP. Intente descargar los archivos individualmente.');
+      console.error('Error al exportar:', error);
+      alert('No se pudo crear el archivo ZIP.');
     }
   };
+  
+  // Función helper para agregar navegación simple a screens existentes
+  function addSimpleNavigationToScreen(originalCode, screenName) {
+    // Si el código ya tiene AppDrawer, no modificar
+    if (originalCode.includes('AppDrawer') || originalCode.includes('drawer:')) {
+      return originalCode;
+    }
+    
+    // Buscar el Scaffold y agregar drawer
+    const scaffoldRegex = /Scaffold\s*\(/;
+    if (scaffoldRegex.test(originalCode)) {
+      return originalCode.replace(
+        scaffoldRegex,
+        'Scaffold(\n      drawer: const AppDrawer(), // Navegación automática\n      '
+      );
+    }
+    
+    return originalCode;
+  }
 
   // Renderizado condicional según la pestaña activa
   const renderTabContent = () => {
@@ -436,6 +518,14 @@ flutter:
             <SmartphoneIcon sx={{ mr: 1 }} />
             <Typography variant="h6">
               Código Flutter Generado: {result.pageInfo.name}
+              {result.result.data?.navigationFiles && (
+                <Chip 
+                  label="Con navegación" 
+                  color="success" 
+                  size="small" 
+                  sx={{ ml: 1 }} 
+                />
+              )}
             </Typography>
           </Box>
           <IconButton onClick={onClose} size="small">
